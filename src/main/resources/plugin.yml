@@ -1,0 +1,27 @@
+name: RoyalWardrobe
+version: ${version}
+main: com.mystipixel.royalwardrobe.RoyalWardrobePlugin
+api-version: '1.21'
+author: Mystipixel
+description: Hypixel-style armor wardrobe — store gear sets and swap between them from a GUI.
+# JDBC driver + connection pool are downloaded at runtime by Paper's library loader.
+libraries:
+  - org.xerial:sqlite-jdbc:3.46.1.3
+  - com.zaxxer:HikariCP:5.1.0
+  - com.mysql:mysql-connector-j:8.4.0
+# Optional: only used to scope wardrobes per RoyalSkyblock profile. Absent = per-player wardrobes.
+softdepend:
+  - PlaceholderAPI
+  - RoyalSkyblock
+commands:
+  wardrobe:
+    description: Open your armor wardrobe.
+    usage: /wardrobe [reload]
+    aliases: [wr, gear]
+permissions:
+  royalwardrobe.use:
+    description: Open and use the wardrobe.
+    default: true
+  royalwardrobe.admin:
+    description: Reload the RoyalWardrobe config.
+    default: op

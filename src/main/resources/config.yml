@@ -1,0 +1,82 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+#  RoyalWardrobe  ·  Configuration
+# ═══════════════════════════════════════════════════════════════════════════════
+#  Store armor sets and swap between them from a GUI (Hypixel-style).
+#
+#  How it works: gear is MOVED, never copied (so stat items can't be duplicated).
+#    - Click a SAVED set  -> you put it on, and the armor you were wearing drops
+#                            into that slot (a swap — click again to swap back).
+#    - Click an EMPTY slot -> the armor you're wearing is stored there (you take
+#                            it off in the process — it's now on the shelf).
+#    - Shift-click a saved set -> take that set out into your inventory.
+# ═══════════════════════════════════════════════════════════════════════════════
+
+wardrobe:
+  # How a player's wardrobe is scoped. If this placeholder resolves (RoyalSkyblock +
+  # PlaceholderAPI installed), each profile gets its own wardrobe; otherwise it's one
+  # wardrobe per player. Blank it to force per-player everywhere.
+  scope-placeholder: "%royalskyblock_profile_id%"
+
+# ── Storage ────────────────────────────────────────────────────────────────────
+# sqlite (default, zero-setup) or mysql (recommended for a network). Same dual-dialect
+# layer as the rest of the Royal suite; drivers load at runtime via Paper's library loader.
+storage:
+  type: sqlite
+  sqlite-file: wardrobe.db
+  mysql:
+    host: localhost
+    port: 3306
+    database: royalwardrobe
+    username: root
+    password: ""
+    pool-size: 10
+    properties: "useSSL=false&characterEncoding=utf8&allowPublicKeyRetrieval=true"
+
+# ── GUI ────────────────────────────────────────────────────────────────────────
+gui:
+  title: "&8Wardrobe"
+  rows: 6
+  # Inventory slots (0-based) where armor sets appear, in order. The NUMBER of slots here
+  # is your wardrobe capacity — add or remove slots to change how many sets a player gets.
+  set-slots: [10, 11, 12, 13, 14, 15, 16,
+              19, 20, 21, 22, 23, 24, 25,
+              28, 29, 30, 31, 32, 33, 34]
+  filler:
+    enabled: true
+    material: GRAY_STAINED_GLASS_PANE
+  close:
+    slot: 49
+    material: BARRIER
+    name: "&cClose"
+  # A saved set's icon is the set's own armor item, with this name/lore overlaid.
+  set-icon:
+    name: "&aArmor Set #%number%"
+    lore:
+      - "&7Pieces: &f%pieces%"
+      - ""
+      - "&eClick &7to equip (swaps with what you're wearing)"
+      - "&eShift-click &7to take the set out"
+  empty-icon:
+    material: ITEM_FRAME
+    name: "&7Empty Slot #%number%"
+    lore:
+      - "&7No set saved here."
+      - ""
+      - "&eClick &7to store the armor you're wearing"
+  # Sound keys are Minecraft namespaced ids (see the wiki). Blank a value to silence it.
+  sounds:
+    open: "block.chest.open"
+    equip: "item.armor.equip_diamond"
+    save: "entity.item.pickup"
+    empty: "block.note_block.bass"
+    volume: 1.0
+    pitch: 1.0
+
+# ── Messages ───────────────────────────────────────────────────────────────────
+messages:
+  prefix: "&6Wardrobe &8» &r"
+  equipped: "&aEquipped set #%number%."
+  saved: "&aStored your armor in slot #%number%."
+  withdrew: "&aTook set #%number% into your inventory."
+  no-armor: "&cYou aren't wearing any armor to store."
+  inventory-full: "&cYour inventory doesn't have room for that set."
