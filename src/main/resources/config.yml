@@ -31,11 +31,12 @@ wardrobe:
   scope-placeholder: "%royalskyblock_profile_id%"
 
 # ── Messages ───────────────────────────────────────────────────────────────────
-# Chat feedback. %number% = the set slot number. Menu text lives in gui/wardrobe.yml.
+# Chat feedback for wardrobe actions. Menu text (buttons, lore) lives in gui/wardrobe.yml.
 messages:
   prefix: "&6Wardrobe &8» &r"
-  equipped: "&aEquipped set #%number%."
-  saved: "&aStored your armor in slot #%number%."
-  withdrew: "&aTook set #%number% into your inventory."
+  equipped: "&aEquipped that setup."
+  stored: "&aStored your current setup."
+  unequipped: "&aUnequipped your setup."
   no-armor: "&cYou aren't wearing any armor to store."
-  inventory-full: "&cYour inventory doesn't have room for that set."
+  already-active: "&cYou're already wearing a saved setup — unequip it first."
+  inventory-full: "&cMake room in your inventory first."

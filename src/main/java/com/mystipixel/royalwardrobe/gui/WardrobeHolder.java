@@ -1,27 +1,29 @@
 package com.mystipixel.royalwardrobe.gui;
 
-import com.mystipixel.royalwardrobe.wardrobe.ArmorSet;
+import com.mystipixel.royalwardrobe.wardrobe.WardrobeData;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.InventoryHolder;
 
 import java.util.UUID;
 
 /**
- * Carries a wardrobe session's state on the open inventory itself: whose it is, which scope it was
- * loaded for, and the live sets. Using an {@link InventoryHolder} means the click listener can tell a
- * wardrobe inventory apart from any other by identity, with no title-string matching.
+ * Carries a wardrobe session's state on the open inventory itself: whose it is, the scope it was loaded
+ * for, the live {@link WardrobeData}, and the page currently shown. Using an {@link InventoryHolder}
+ * lets the listener identify a wardrobe inventory (and its page) with no title-string matching.
  */
 public final class WardrobeHolder implements InventoryHolder {
 
     private final UUID owner;
     private final String scope;
-    private final ArmorSet[] sets;
+    private final WardrobeData data;
+    private int page;
     private Inventory inventory;
 
-    public WardrobeHolder(UUID owner, String scope, ArmorSet[] sets) {
+    public WardrobeHolder(UUID owner, String scope, WardrobeData data, int page) {
         this.owner = owner;
         this.scope = scope;
-        this.sets = sets;
+        this.data = data;
+        this.page = page;
     }
 
     public UUID owner() {
@@ -32,8 +34,16 @@ public final class WardrobeHolder implements InventoryHolder {
         return scope;
     }
 
-    public ArmorSet[] sets() {
-        return sets;
+    public WardrobeData data() {
+        return data;
+    }
+
+    public int page() {
+        return page;
+    }
+
+    public void setPage(int page) {
+        this.page = page;
     }
 
     void setInventory(Inventory inventory) {

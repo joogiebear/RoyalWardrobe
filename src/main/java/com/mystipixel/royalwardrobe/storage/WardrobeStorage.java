@@ -2,6 +2,7 @@ package com.mystipixel.royalwardrobe.storage;
 
 import com.mystipixel.royalwardrobe.wardrobe.ArmorSet;
 import com.mystipixel.royalwardrobe.wardrobe.ItemCodec;
+import com.mystipixel.royalwardrobe.wardrobe.WardrobeData;
 import com.zaxxer.hikari.HikariConfig;
 import com.zaxxer.hikari.HikariDataSource;
 import org.bukkit.configuration.ConfigurationSection;
@@ -9,6 +10,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 import java.io.File;
 import java.sql.Connection;
+import java.sql.DatabaseMetaData;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -18,11 +20,10 @@ import java.util.UUID;
 import java.util.logging.Level;
 
 /**
- * Persistence for wardrobe sets over one HikariCP data source, dual-dialect (SQLite default / MySQL for
- * a network) exactly like the rest of the Royal suite. The JDBC driver + pool arrive via Paper's library
- * loader (plugin.yml {@code libraries}); nothing is shaded. Each row is one set: {@code (owner, scope,
- * idx) -> armor} where armor is the Base64 of four ItemStacks. All methods are blocking JDBC — callers
- * run them off the main thread.
+ * Persistence for wardrobe sets over one HikariCP data source, dual-dialect (SQLite / MySQL) like the
+ * rest of the suite. One row per set: {@code (owner, scope, idx) -> armor, first_worn, active}. The
+ * <em>active</em> set's items live on the player, so its row stores empty armor with {@code active=1}
+ * and only its {@code first_worn} date — which is what keeps everything dupe-safe.
  */
 public final class WardrobeStorage {
 
@@ -100,26 +101,55 @@ public final class WardrobeStorage {
                 + "scope VARCHAR(64) NOT NULL, "
                 + "idx INT NOT NULL, "
                 + "armor " + armorType + " NOT NULL, "
+                + "first_worn BIGINT NOT NULL DEFAULT 0, "
+                + "active INT NOT NULL DEFAULT 0, "
                 + "PRIMARY KEY (owner, scope, idx))";
         try (Connection c = dataSource.getConnection(); Statement st = c.createStatement()) {
             st.executeUpdate(ddl);
+            // Migrate a pre-existing v1 table (armor only) by adding the columns if they're missing.
+            addColumnIfMissing(c, "wardrobe_sets", "first_worn", "BIGINT NOT NULL DEFAULT 0");
+            addColumnIfMissing(c, "wardrobe_sets", "active", "INT NOT NULL DEFAULT 0");
         }
     }
 
-    /** Load a player's sets for a scope into a fixed-capacity array (empty slots stay {@link ArmorSet#empty}). */
-    public ArmorSet[] load(UUID owner, String scope, int capacity) {
+    private void addColumnIfMissing(Connection c, String table, String column, String definition) {
+        try {
+            DatabaseMetaData meta = c.getMetaData();
+            try (ResultSet rs = meta.getColumns(c.getCatalog(), null, table, column)) {
+                if (rs.next()) {
+                    return; // already present
+                }
+            }
+            try (Statement st = c.createStatement()) {
+                st.executeUpdate("ALTER TABLE " + table + " ADD COLUMN " + column + " " + definition);
+                plugin.getLogger().info("Added missing column " + table + "." + column + ".");
+            }
+        } catch (SQLException e) {
+            plugin.getLogger().log(Level.WARNING, "Could not ensure column " + table + "." + column, e);
+        }
+    }
+
+    public WardrobeData load(UUID owner, String scope, int capacity) {
         ArmorSet[] sets = new ArmorSet[capacity];
+        long[] firstWorn = new long[capacity];
         for (int i = 0; i < capacity; i++) {
             sets[i] = ArmorSet.empty();
         }
-        String sql = "SELECT idx, armor FROM wardrobe_sets WHERE owner = ? AND scope = ?";
+        int activeIndex = -1;
+        String sql = "SELECT idx, armor, first_worn, active FROM wardrobe_sets WHERE owner = ? AND scope = ?";
         try (Connection c = dataSource.getConnection(); PreparedStatement st = c.prepareStatement(sql)) {
             st.setString(1, owner.toString());
             st.setString(2, scope);
             try (ResultSet rs = st.executeQuery()) {
                 while (rs.next()) {
                     int idx = rs.getInt("idx");
-                    if (idx >= 0 && idx < capacity) {
+                    if (idx < 0 || idx >= capacity) {
+                        continue;
+                    }
+                    firstWorn[idx] = rs.getLong("first_worn");
+                    if (rs.getInt("active") == 1) {
+                        activeIndex = idx;            // items are on the player, not in storage
+                    } else {
                         sets[idx] = new ArmorSet(ItemCodec.decode(rs.getString("armor")));
                     }
                 }
@@ -127,32 +157,37 @@ public final class WardrobeStorage {
         } catch (Exception e) {
             plugin.getLogger().log(Level.WARNING, "Failed to load wardrobe for " + owner + "/" + scope, e);
         }
-        return sets;
+        return new WardrobeData(sets, firstWorn, activeIndex);
     }
 
-    /** Persist one slot: upsert when the set has pieces, delete the row when it's empty. */
-    public void saveSet(UUID owner, String scope, int idx, ArmorSet set) {
-        if (set == null || set.isEmpty()) {
-            deleteSet(owner, scope, idx);
+    /** Upsert one slot. An empty, never-worn, inactive slot is deleted instead. */
+    public void save(UUID owner, String scope, int idx, ArmorSet set, long firstWorn, boolean active) {
+        boolean empty = set == null || set.isEmpty();
+        if (!active && empty && firstWorn <= 0) {
+            delete(owner, scope, idx);
             return;
         }
+        String armor = active || empty ? "" : ItemCodec.encode(set.pieces());
         String sql = type == Type.MYSQL
-                ? "INSERT INTO wardrobe_sets (owner, scope, idx, armor) VALUES (?,?,?,?) "
-                + "ON DUPLICATE KEY UPDATE armor=VALUES(armor)"
-                : "INSERT INTO wardrobe_sets (owner, scope, idx, armor) VALUES (?,?,?,?) "
-                + "ON CONFLICT(owner, scope, idx) DO UPDATE SET armor=excluded.armor";
+                ? "INSERT INTO wardrobe_sets (owner, scope, idx, armor, first_worn, active) VALUES (?,?,?,?,?,?) "
+                + "ON DUPLICATE KEY UPDATE armor=VALUES(armor), first_worn=VALUES(first_worn), active=VALUES(active)"
+                : "INSERT INTO wardrobe_sets (owner, scope, idx, armor, first_worn, active) VALUES (?,?,?,?,?,?) "
+                + "ON CONFLICT(owner, scope, idx) DO UPDATE SET armor=excluded.armor, "
+                + "first_worn=excluded.first_worn, active=excluded.active";
         try (Connection c = dataSource.getConnection(); PreparedStatement st = c.prepareStatement(sql)) {
             st.setString(1, owner.toString());
             st.setString(2, scope);
             st.setInt(3, idx);
-            st.setString(4, ItemCodec.encode(set.pieces()));
+            st.setString(4, armor);
+            st.setLong(5, Math.max(0, firstWorn));
+            st.setInt(6, active ? 1 : 0);
             st.executeUpdate();
         } catch (Exception e) {
             plugin.getLogger().log(Level.WARNING, "Failed to save wardrobe slot " + idx + " for " + owner, e);
         }
     }
 
-    private void deleteSet(UUID owner, String scope, int idx) {
+    private void delete(UUID owner, String scope, int idx) {
         try (Connection c = dataSource.getConnection();
              PreparedStatement st = c.prepareStatement(
                      "DELETE FROM wardrobe_sets WHERE owner = ? AND scope = ? AND idx = ?")) {

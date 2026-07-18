@@ -4,13 +4,15 @@ import com.mystipixel.royalwardrobe.RoyalWardrobePlugin;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
+import org.bukkit.event.inventory.ClickType;
 import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.inventory.InventoryDragEvent;
 
 /**
- * Turns clicks on a {@link WardrobeHolder} inventory into wardrobe actions. Every interaction with the
- * menu is cancelled first — the menu never lets an item be picked up or dropped directly, so there is
- * no path to pull gear out except the controlled withdraw action. This is what keeps it dupe-safe.
+ * Routes clicks on a {@link WardrobeHolder} inventory into wardrobe actions. Every interaction is
+ * cancelled first — the menu moves items itself (via the cursor), so there is no uncontrolled path for
+ * an item to enter or leave, which is what keeps the wardrobe dupe-safe. Only plain left/right clicks
+ * on the wardrobe (top) inventory are acted on; number-key swaps, drops and drags are just blocked.
  */
 public final class WardrobeMenuListener implements Listener {
 
@@ -26,12 +28,16 @@ public final class WardrobeMenuListener implements Listener {
             return;
         }
         event.setCancelled(true);
-        if (!(event.getWhoClicked() instanceof Player player) || event.getClickedInventory() == null) {
+        if (!(event.getWhoClicked() instanceof Player player)) {
             return;
         }
-        // Only clicks in the wardrobe (top) inventory do anything; the cancel above blocks the rest.
-        if (event.getClickedInventory().getHolder() instanceof WardrobeHolder) {
-            plugin.menu().handleClick(player, holder, event.getSlot(), event.isShiftClick(), event.isRightClick());
+        // Only handle simple left/right clicks on the wardrobe itself; block everything else.
+        ClickType click = event.getClick();
+        boolean simple = click == ClickType.LEFT || click == ClickType.RIGHT
+                || click == ClickType.SHIFT_LEFT || click == ClickType.SHIFT_RIGHT;
+        if (simple && event.getClickedInventory() != null
+                && event.getClickedInventory().getHolder() instanceof WardrobeHolder) {
+            plugin.menu().handleClick(player, holder, event.getSlot());
         }
     }
 

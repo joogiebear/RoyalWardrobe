@@ -1,23 +1,24 @@
 package com.mystipixel.royalwardrobe.gui;
 
 import com.mystipixel.royalwardrobe.RoyalWardrobePlugin;
-import com.mystipixel.royalwardrobe.gui.menu.MenuEffect;
-import com.mystipixel.royalwardrobe.gui.menu.MenuSlot;
-import com.mystipixel.royalwardrobe.gui.menu.MenuTemplate;
+import com.mystipixel.royalwardrobe.gui.menu.ItemSpec;
 import com.mystipixel.royalwardrobe.util.Text;
 import com.mystipixel.royalwardrobe.wardrobe.ArmorSet;
-import net.kyori.adventure.text.Component;
-import org.bukkit.Material;
+import com.mystipixel.royalwardrobe.wardrobe.WardrobeData;
 import org.bukkit.Sound;
 import org.bukkit.configuration.file.FileConfiguration;
+import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
-import org.bukkit.inventory.meta.ItemMeta;
 
 import java.io.File;
+import java.time.Instant;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -25,18 +26,26 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 /**
- * Builds and drives the wardrobe GUI from a {@code gui/wardrobe.yml} menu in the suite's EcoMenus
- * dialect: {@code title}/{@code rows}, a {@code sounds:} block, a page {@code mask} whose {@code 0}
- * region is the set grid, and fixed {@code slots} (close, etc.) with {@code left-click} effects. Sets
- * load off the main thread, then the inventory opens on it.
+ * The wardrobe GUI, modelled on Hypixel's: each of the 9 columns is one armor set — 4 stacked piece
+ * slots (helmet→boots) with a control dye below, and a bottom nav row (page arrows + close). Multiple
+ * pages. Everything visual comes from {@code gui/wardrobe.yml} in the suite's item-spec/sounds style.
  *
- * <p>Gear is only ever <em>moved</em> — equip swaps worn↔slot, save moves worn into an empty slot —
- * so a stat item can never be duplicated.
+ * <p><b>Dupe-safe by construction.</b> The <em>active</em> set (the one you're wearing) lives on the
+ * player, not in storage — its column mirrors your armor and is locked. Equipping another set writes
+ * your current set back to its column (or loose armor to your inventory) and moves the new set onto
+ * you; storing/unequipping/manual placement all move single items via the cursor. No item is ever
+ * copied, so nothing can be duplicated.
  */
 public final class WardrobeMenu {
 
+    private static final int SIZE = 54;
+    private static final int DYE_ROW = 4;      // row index of the control dyes
+    private static final int NAV_ROW = 5;      // bottom navigation row
+
     private final RoyalWardrobePlugin plugin;
-    private MenuTemplate template;
+    private FileConfiguration gui;
+    private int columns;
+    private int pages;
 
     public WardrobeMenu(RoyalWardrobePlugin plugin) {
         this.plugin = plugin;
@@ -48,169 +57,248 @@ public final class WardrobeMenu {
         if (!file.exists()) {
             plugin.saveResource("gui/wardrobe.yml", false);
         }
-        this.template = MenuTemplate.load(file, "&8Wardrobe", 6);
+        this.gui = YamlConfiguration.loadConfiguration(file);
+        this.columns = Math.max(1, Math.min(9, gui.getInt("columns-per-page", 9)));
+        this.pages = Math.max(1, gui.getInt("pages", 2));
     }
 
-    /** Capacity = the number of content slots ({@code 0}s) in the menu mask. */
     public int capacity() {
-        return template.contentSlots().size();
+        return columns * pages;
     }
 
-    // ── open / render ──────────────────────────────────────────────────────────────
+    // ── open / paging ──────────────────────────────────────────────────────────────
 
     public void open(Player player) {
         String scope = plugin.scopes().scopeFor(player);
         int capacity = capacity();
         plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
-            ArmorSet[] sets = plugin.storage().load(player.getUniqueId(), scope, capacity);
+            WardrobeData data = plugin.storage().load(player.getUniqueId(), scope, capacity);
             plugin.getServer().getScheduler().runTask(plugin, () -> {
-                if (!player.isOnline()) {
-                    return;
+                if (player.isOnline()) {
+                    openPage(player, new WardrobeHolder(player.getUniqueId(), scope, data, 0), 0);
+                    playSound(player, "open");
                 }
-                WardrobeHolder holder = new WardrobeHolder(player.getUniqueId(), scope, sets);
-                Inventory inv = plugin.getServer().createInventory(holder, template.size(), Text.of(template.title()));
-                holder.setInventory(inv);
-                render(holder);
-                player.openInventory(inv);
-                playSound(player, "sounds.open");
             });
         });
     }
 
-    public void render(WardrobeHolder holder) {
+    private void openPage(Player player, WardrobeHolder holder, int page) {
+        holder.setPage(page);
+        Inventory inv = plugin.getServer().createInventory(holder, SIZE, Text.of(title(page)));
+        holder.setInventory(inv);
+        render(player, holder);
+        player.openInventory(inv);
+    }
+
+    private String title(int page) {
+        return gui.getString("title", "&8&lWardrobe (%page%/%pages%)")
+                .replace("%page%", Integer.toString(page + 1))
+                .replace("%pages%", Integer.toString(pages));
+    }
+
+    // ── render ─────────────────────────────────────────────────────────────────────
+
+    public void render(Player player, WardrobeHolder holder) {
         Inventory inv = holder.getInventory();
-        inv.clear();
-        template.applyFiller(inv);
-        for (MenuSlot slot : template.slots()) {
-            inv.setItem(slot.index(), slot.item().build(Map.of(), slot.lore()));
+        ItemStack navFiller = item("nav.filler", "gray_stained_glass_pane name:\" \"", null, Map.of());
+        for (int i = 0; i < SIZE; i++) {
+            inv.setItem(i, navFiller.clone());
         }
-        List<Integer> content = template.contentSlots();
-        ArmorSet[] sets = holder.sets();
-        for (int k = 0; k < content.size() && k < sets.length; k++) {
-            inv.setItem(content.get(k), renderSet(sets[k], k + 1));
+
+        WardrobeData data = holder.data();
+        int page = holder.page();
+        for (int c = 0; c < columns; c++) {
+            int setIndex = page * columns + c;
+            boolean active = data.activeIndex() == setIndex;
+            ArmorSet set = active ? wornSet(player) : data.set(setIndex);
+            for (int row = 0; row < ArmorSet.SIZE; row++) {
+                ItemStack piece = set.piece(row);
+                inv.setItem(c + row * 9, piece != null && !piece.getType().isAir()
+                        ? piece.clone()
+                        : item("empty-slot.item", "light_gray_stained_glass_pane name:\" \"", null, Map.of()));
+            }
+            inv.setItem(c + DYE_ROW * 9, dyeFor(set, active, setIndex, data));
         }
+
+        int base = NAV_ROW * 9;
+        if (page > 0) {
+            inv.setItem(navSlot("previous", base), item("nav.previous.item", "arrow name:\"&ePrevious Page\"", "nav.previous.lore", Map.of()));
+        }
+        if (page < pages - 1) {
+            inv.setItem(navSlot("next", base + 8), item("nav.next.item", "arrow name:\"&eNext Page\"", "nav.next.lore", Map.of()));
+        }
+        inv.setItem(navSlot("close", base + 4), item("nav.close.item", "barrier name:\"&cClose\"", "nav.close.lore", Map.of()));
+        player.updateInventory();
     }
 
-    private ItemStack renderSet(ArmorSet set, int number) {
-        FileConfiguration cfg = template.config();
-        Map<String, String> ph = Map.of("number", Integer.toString(number), "pieces", pieces(set));
-        if (set == null || set.isEmpty()) {
-            String spec = cfg.getString("empty-icon.item", "item_frame name:\"&7Empty Slot #%number%\"");
-            return com.mystipixel.royalwardrobe.gui.menu.ItemSpec.parse(spec)
-                    .build(ph, cfg.getStringList("empty-icon.lore"));
+    private ItemStack dyeFor(ArmorSet set, boolean active, int setIndex, WardrobeData data) {
+        Map<String, String> ph = new HashMap<>();
+        ph.put("number", Integer.toString(setIndex + 1));
+        ph.put("pieces", pieces(set));
+        ph.put("first_worn", date(data.firstWorn(setIndex)));
+        if (active) {
+            return item("dye.unequip.item", "lime_dye name:\"&aActive Setup\"", "dye.unequip.lore", ph);
         }
-        ItemStack base = set.icon();
-        ItemStack display = base != null ? base.clone() : new ItemStack(Material.ARMOR_STAND);
-        return overlay(display, cfg.getString("set-icon.name", "&aArmor Set #%number%"),
-                cfg.getStringList("set-icon.lore"), ph);
+        if (set != null && !set.isEmpty()) {
+            return item("dye.equip.item", "pink_dye name:\"&dEquip Setup\"", "dye.equip.lore", ph);
+        }
+        return item("dye.store.item", "gray_dye name:\"&7Store Current Setup\"", "dye.store.lore", ph);
     }
 
-    private ItemStack overlay(ItemStack item, String name, List<String> lore, Map<String, String> ph) {
-        ItemMeta meta = item.getItemMeta();
-        if (meta != null) {
-            if (name != null) {
-                meta.displayName(Text.of(apply(name, ph)));
-            }
-            if (lore != null && !lore.isEmpty()) {
-                List<Component> lines = new ArrayList<>(lore.size());
-                for (String line : lore) {
-                    lines.add(Text.of(apply(line, ph)));
-                }
-                meta.lore(lines);
-            }
-            item.setItemMeta(meta);
-        }
-        return item;
-    }
+    // ── click handling (all clicks are cancelled by the listener; we move items ourselves) ──
 
-    // ── click handling ───────────────────────────────────────────────────────────
+    public void handleClick(Player player, WardrobeHolder holder, int slot) {
+        int row = slot / 9;
+        int col = slot % 9;
+        WardrobeData data = holder.data();
 
-    public void handleClick(Player player, WardrobeHolder holder, int rawSlot, boolean shift, boolean right) {
-        int index = template.contentSlots().indexOf(rawSlot);
-        if (index >= 0 && index < holder.sets().length) {
-            ArmorSet slot = holder.sets()[index];
-            if (shift && slot != null && !slot.isEmpty()) {
-                withdraw(player, holder, index);
-            } else if (slot == null || slot.isEmpty()) {
-                save(player, holder, index);
-            } else {
-                equip(player, holder, index);
+        if (row < ArmorSet.SIZE) {
+            if (col >= columns) {
+                return;
             }
+            int setIndex = holder.page() * columns + col;
+            if (data.activeIndex() == setIndex) {
+                return;                          // active setup is locked — can't be modified here
+            }
+            handleArmorSlot(player, holder, setIndex, row);
             return;
         }
-        MenuSlot slot = template.slotAt(rawSlot);
-        if (slot != null) {
-            List<MenuEffect> effects = right && !slot.rightClick().isEmpty() ? slot.rightClick() : slot.leftClick();
-            runEffects(player, effects);
+        if (row == DYE_ROW) {
+            if (col >= columns) {
+                return;
+            }
+            handleDye(player, holder, holder.page() * columns + col);
+            return;
         }
-    }
-
-    private void runEffects(Player player, List<MenuEffect> effects) {
-        for (MenuEffect effect : effects) {
-            switch (effect.id().toLowerCase(Locale.ROOT)) {
-                case "close_inventory", "close" -> player.closeInventory();
-                case "play_sound" -> playRaw(player, effect.argString("sound", ""),
-                        (float) effect.argDouble("volume", 1.0), (float) effect.argDouble("pitch", 1.0));
-                default -> { /* unknown effect id — ignore, never crash the menu */ }
+        if (row == NAV_ROW) {
+            int base = NAV_ROW * 9;
+            if (slot == navSlot("previous", base) && holder.page() > 0) {
+                openPage(player, holder, holder.page() - 1);
+            } else if (slot == navSlot("next", base + 8) && holder.page() < pages - 1) {
+                openPage(player, holder, holder.page() + 1);
+            } else if (slot == navSlot("close", base + 4)) {
+                player.closeInventory();
             }
         }
     }
 
-    // ── actions (dupe-safe: gear is moved, never copied) ───────────────────────────
+    /** Cursor-based place/take of a single piece into an inactive column's slot. Armor-type validated. */
+    private void handleArmorSlot(Player player, WardrobeHolder holder, int setIndex, int row) {
+        ArmorSet set = holder.data().set(setIndex);
+        ItemStack cursor = player.getItemOnCursor();
+        ItemStack current = set.piece(row);
+        boolean cursorEmpty = cursor == null || cursor.getType().isAir();
+        boolean currentEmpty = current == null || current.getType().isAir();
 
-    private void equip(Player player, WardrobeHolder holder, int index) {
-        ItemStack[] worn = worn(player);
-        setWorn(player, holder.sets()[index].pieces());
-        holder.sets()[index] = new ArmorSet(worn);
-        persist(holder, index);
-        refresh(player, holder);
-        playSound(player, "sounds.equip");
-        message(player, "equipped", index + 1);
-    }
-
-    private void save(Player player, WardrobeHolder holder, int index) {
-        ItemStack[] worn = worn(player);
-        boolean anything = Arrays.stream(worn).anyMatch(p -> p != null && !p.getType().isAir());
-        if (!anything) {
-            playSound(player, "sounds.fail");
-            message(player, "no-armor", index + 1);
+        if (cursorEmpty && currentEmpty) {
             return;
         }
-        holder.sets()[index] = new ArmorSet(worn);
+        final ItemStack newCursor;
+        if (cursorEmpty) {                       // take the stored piece onto the cursor
+            newCursor = current;
+            set.pieces()[row] = null;
+        } else {                                 // place the cursor piece, swap the old one out
+            if (!isArmorForRow(cursor, row)) {
+                playSound(player, "fail");
+                return;
+            }
+            newCursor = currentEmpty ? null : current.clone();
+            set.pieces()[row] = cursor.clone();
+        }
+        persist(holder, setIndex);
+        render(player, holder);
+        // Setting the cursor inside a cancelled click desyncs the client; apply it next tick.
+        plugin.getServer().getScheduler().runTask(plugin, () -> {
+            if (player.isOnline()) {
+                player.setItemOnCursor(newCursor);
+            }
+        });
+    }
+
+    private void handleDye(Player player, WardrobeHolder holder, int setIndex) {
+        WardrobeData data = holder.data();
+        if (data.activeIndex() == setIndex) {
+            unequip(player, holder);
+        } else if (!data.set(setIndex).isEmpty()) {
+            equip(player, holder, setIndex);
+        } else {
+            storeCurrent(player, holder, setIndex);
+        }
+    }
+
+    // ── actions ────────────────────────────────────────────────────────────────────
+
+    private void equip(Player player, WardrobeHolder holder, int target) {
+        WardrobeData data = holder.data();
+        ArmorSet worn = wornSet(player);
+        int active = data.activeIndex();
+
+        if (active != -1) {
+            data.setSet(active, worn);           // the set you were wearing goes back to its column
+            data.setActiveIndex(-1);
+            persist(holder, active);
+        } else if (!worn.isEmpty()) {
+            if (!moveToInventory(player, worn)) { // loose armor -> inventory
+                playSound(player, "fail");
+                message(player, "inventory-full");
+                return;
+            }
+        }
+
+        setWorn(player, data.set(target).pieces());
+        data.setSet(target, ArmorSet.empty());   // items are on the player now
+        data.setActiveIndex(target);
+        if (data.firstWorn(target) <= 0) {
+            data.setFirstWorn(target, now());
+        }
+        persist(holder, target);
+        render(player, holder);
+        playSound(player, "equip");
+        message(player, "equipped");
+    }
+
+    private void storeCurrent(Player player, WardrobeHolder holder, int target) {
+        WardrobeData data = holder.data();
+        if (data.activeIndex() != -1) {
+            playSound(player, "fail");
+            message(player, "already-active");
+            return;
+        }
+        ArmorSet worn = wornSet(player);
+        if (worn.isEmpty()) {
+            playSound(player, "fail");
+            message(player, "no-armor");
+            return;
+        }
+        data.setActiveIndex(target);             // your worn armor becomes this (active) set
+        data.setFirstWorn(target, now());
+        data.setSet(target, ArmorSet.empty());
+        persist(holder, target);
+        render(player, holder);
+        playSound(player, "store");
+        message(player, "stored");
+    }
+
+    private void unequip(Player player, WardrobeHolder holder) {
+        WardrobeData data = holder.data();
+        int active = data.activeIndex();
+        if (active == -1) {
+            return;
+        }
+        data.setSet(active, wornSet(player));    // worn armor goes back into its column
+        data.setActiveIndex(-1);
         setWorn(player, new ItemStack[ArmorSet.SIZE]);
-        persist(holder, index);
-        refresh(player, holder);
-        playSound(player, "sounds.save");
-        message(player, "saved", index + 1);
+        persist(holder, active);
+        render(player, holder);
+        playSound(player, "unequip");
+        message(player, "unequipped");
     }
 
-    private void withdraw(Player player, WardrobeHolder holder, int index) {
-        List<ItemStack> items = new ArrayList<>();
-        for (ItemStack piece : holder.sets()[index].pieces()) {
-            if (piece != null && !piece.getType().isAir()) {
-                items.add(piece);
-            }
-        }
-        long free = Arrays.stream(player.getInventory().getStorageContents())
-                .filter(s -> s == null || s.getType().isAir()).count();
-        if (free < items.size()) {
-            playSound(player, "sounds.fail");
-            message(player, "inventory-full", index + 1);
-            return;
-        }
-        player.getInventory().addItem(items.toArray(new ItemStack[0]));
-        holder.sets()[index] = ArmorSet.empty();
-        persist(holder, index);
-        refresh(player, holder);
-        playSound(player, "sounds.save");
-        message(player, "withdrew", index + 1);
-    }
+    // ── item / player helpers ────────────────────────────────────────────────────────
 
-    // ── helpers ────────────────────────────────────────────────────────────────────
-
-    private ItemStack[] worn(Player player) {
+    private ArmorSet wornSet(Player player) {
         var inv = player.getInventory();
-        return new ItemStack[]{inv.getHelmet(), inv.getChestplate(), inv.getLeggings(), inv.getBoots()};
+        return new ArmorSet(new ItemStack[]{inv.getHelmet(), inv.getChestplate(), inv.getLeggings(), inv.getBoots()});
     }
 
     private void setWorn(Player player, ItemStack[] pieces) {
@@ -221,17 +309,51 @@ public final class WardrobeMenu {
         inv.setBoots(pieces[ArmorSet.BOOTS]);
     }
 
-    private void persist(WardrobeHolder holder, int index) {
-        UUID owner = holder.owner();
-        String scope = holder.scope();
-        ArmorSet set = holder.sets()[index];
-        plugin.getServer().getScheduler().runTaskAsynchronously(plugin,
-                () -> plugin.storage().saveSet(owner, scope, index, set));
+    /** Move a worn set's pieces into the inventory (used when equipping over loose armor). */
+    private boolean moveToInventory(Player player, ArmorSet worn) {
+        List<ItemStack> items = new ArrayList<>();
+        for (ItemStack piece : worn.pieces()) {
+            if (piece != null && !piece.getType().isAir()) {
+                items.add(piece);
+            }
+        }
+        long free = Arrays.stream(player.getInventory().getStorageContents())
+                .filter(s -> s == null || s.getType().isAir()).count();
+        if (free < items.size()) {
+            return false;
+        }
+        player.getInventory().addItem(items.toArray(new ItemStack[0]));
+        setWorn(player, new ItemStack[ArmorSet.SIZE]);
+        return true;
     }
 
-    private void refresh(Player player, WardrobeHolder holder) {
-        render(holder);
-        player.updateInventory();
+    private static boolean isArmorForRow(ItemStack item, int row) {
+        String n = item.getType().name();
+        return switch (row) {
+            case ArmorSet.HELMET -> n.endsWith("_HELMET") || n.endsWith("_HEAD") || n.endsWith("_SKULL")
+                    || n.equals("CARVED_PUMPKIN");
+            case ArmorSet.CHEST -> n.endsWith("_CHESTPLATE") || n.equals("ELYTRA");
+            case ArmorSet.LEGS -> n.endsWith("_LEGGINGS");
+            case ArmorSet.BOOTS -> n.endsWith("_BOOTS");
+            default -> false;
+        };
+    }
+
+    private void persist(WardrobeHolder holder, int index) {
+        WardrobeData data = holder.data();
+        UUID owner = holder.owner();
+        String scope = holder.scope();
+        ArmorSet set = data.set(index);
+        long firstWorn = data.firstWorn(index);
+        boolean active = data.activeIndex() == index;
+        plugin.getServer().getScheduler().runTaskAsynchronously(plugin,
+                () -> plugin.storage().save(owner, scope, index, set, firstWorn, active));
+    }
+
+    private ItemStack item(String itemPath, String def, String lorePath, Map<String, String> ph) {
+        String spec = gui.getString(itemPath, def);
+        List<String> lore = lorePath == null ? List.of() : gui.getStringList(lorePath);
+        return ItemSpec.parse(spec).build(ph, lore);
     }
 
     private String pieces(ArmorSet set) {
@@ -240,63 +362,69 @@ public final class WardrobeMenu {
         }
         return Arrays.stream(set.pieces())
                 .filter(p -> p != null && !p.getType().isAir())
-                .map(this::prettyName)
+                .map(p -> prettyName(p.getType().getKey().getKey()))
                 .collect(Collectors.joining(", "));
     }
 
-    private String prettyName(ItemStack item) {
-        String key = item.getType().getKey().getKey();
+    private String date(long millis) {
+        if (millis <= 0) {
+            return gui.getString("never-worn", "—");
+        }
+        try {
+            DateTimeFormatter fmt = DateTimeFormatter.ofPattern(gui.getString("date-format", "MMM d, yyyy"), Locale.ENGLISH);
+            return fmt.format(Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault()));
+        } catch (RuntimeException e) {
+            return "—";
+        }
+    }
+
+    private static String prettyName(String key) {
         StringBuilder b = new StringBuilder(key.length());
         boolean up = true;
-        for (char c : key.toCharArray()) {
-            if (c == '_') {
+        for (char ch : key.toCharArray()) {
+            if (ch == '_') {
                 b.append(' ');
                 up = true;
             } else {
-                b.append(up ? Character.toUpperCase(c) : c);
+                b.append(up ? Character.toUpperCase(ch) : ch);
                 up = false;
             }
         }
         return b.toString();
     }
 
-    private String apply(String s, Map<String, String> ph) {
-        if (s == null) {
-            return "";
-        }
-        String out = s;
-        for (Map.Entry<String, String> e : ph.entrySet()) {
-            out = out.replace("%" + e.getKey() + "%", e.getValue());
-        }
-        return out;
+    private int navSlot(String key, int def) {
+        return gui.getInt("nav." + key + ".slot", def);
     }
 
-    private void playSound(Player player, String path) {
-        FileConfiguration cfg = template.config();
-        if (!cfg.getBoolean(path + ".enabled", false)) {
+    private long now() {
+        return System.currentTimeMillis();
+    }
+
+    // ── sounds / messages ────────────────────────────────────────────────────────────
+
+    private void playSound(Player player, String key) {
+        if (!gui.getBoolean("sounds." + key + ".enabled", false)) {
             return;
         }
-        playRaw(player, cfg.getString(path + ".name", ""),
-                (float) cfg.getDouble(path + ".volume", 1.0), (float) cfg.getDouble(path + ".pitch", 1.0));
-    }
-
-    private void playRaw(Player player, String rawSound, float volume, float pitch) {
-        if (rawSound == null || rawSound.isBlank()) {
+        String name = gui.getString("sounds." + key + ".name", "");
+        if (name == null || name.isBlank()) {
             return;
         }
         try {
-            player.playSound(player.getLocation(), Sound.valueOf(rawSound.toUpperCase(Locale.ROOT)), volume, pitch);
+            player.playSound(player.getLocation(), Sound.valueOf(name.toUpperCase(Locale.ROOT)),
+                    (float) gui.getDouble("sounds." + key + ".volume", 1.0),
+                    (float) gui.getDouble("sounds." + key + ".pitch", 1.0));
         } catch (IllegalArgumentException e) {
-            plugin.getLogger().warning("Unknown GUI sound: " + rawSound);
+            plugin.getLogger().warning("Unknown GUI sound: " + name);
         }
     }
 
-    private void message(Player player, String key, int number) {
+    private void message(Player player, String key) {
         String raw = plugin.getConfig().getString("messages." + key, "");
         if (raw == null || raw.isBlank()) {
             return;
         }
-        String prefix = plugin.getConfig().getString("messages.prefix", "");
-        player.sendMessage(Text.of(prefix + raw.replace("%number%", Integer.toString(number))));
+        player.sendMessage(Text.of(plugin.getConfig().getString("messages.prefix", "") + raw));
     }
 }

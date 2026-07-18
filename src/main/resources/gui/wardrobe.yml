@@ -1,25 +1,35 @@
 # ═══════════════════════════════════════════════════════════════════════════════
-#  RoyalWardrobe · Wardrobe menu      EcoMenus dialect (shared with the Royal suite)
+#  RoyalWardrobe · Wardrobe menu          (item-spec + sounds style, like the suite)
 # ═══════════════════════════════════════════════════════════════════════════════
-#  The mask '0' slots are your armor-set slots — the plugin fills them in order, so the
-#  NUMBER of '0's is your wardrobe capacity. '1' slots are the filler item.
+#  Layout is Hypixel-style and fixed at 6 rows:
+#     rows 1-4  → each column is an armor SET (helmet, chestplate, leggings, boots)
+#     row 5     → a control DYE under each column
+#     row 6     → navigation (page arrows + close)
 #
-#  How each set slot works (gear is MOVED, never copied — no dupes):
-#    Click a SAVED set   -> wear it; the armor you had on drops into that slot (a swap).
-#    Click an EMPTY slot  -> the armor you're wearing is stored there.
-#    Shift-click a set    -> take it back out into your inventory.
+#  Control dyes (chosen automatically per column):
+#     GRAY  → empty column   : store the armor you're wearing here
+#     PINK  → a saved set     : click to equip it (swaps with what you're wearing)
+#     LIME  → the active set  : the one you're wearing (locked); click to unequip
 #
-#  Fixed slots take left-click / right-click effect lists. Effects:
-#    close_inventory
-#    play_sound   args: { sound: <NAME>, volume: <n>, pitch: <n> }
+#  You can also drag armor pieces straight into an empty column's slots. Your active
+#  (worn) set's column is locked — you can't edit it here. Gear is MOVED, never copied.
 #
-#  Item syntax (same as the rest of the suite):  <material> [hide_attributes] name:"&a..."
+#  Item syntax (same as the rest of the suite): <material> [hide_attributes] name:"&a..."
+#  Placeholders in dye lore: %number% %pieces% %first_worn%
 # ═══════════════════════════════════════════════════════════════════════════════
 
-title: "&8&lWardrobe"
-rows: 6
+title: "&8&lWardrobe &7(%page%/%pages%)"
 
-# Sounds the plugin plays for wardrobe actions (suite extension to the dialect).
+# 9 columns = 9 sets per page. pages 2 → 18 sets total. Lower columns-per-page to leave
+# side gaps; raise pages for more sets.
+columns-per-page: 9
+pages: 2
+
+# Date shown for a saved set (the day you first wore it).
+date-format: "MMM d, yyyy"
+never-worn: "&7—"
+
+# ── Sounds ─────────────────────────────────────────────────────────────────────
 sounds:
   open:
     enabled: true
@@ -31,51 +41,61 @@ sounds:
     name: ITEM_ARMOR_EQUIP_DIAMOND
     volume: 0.8
     pitch: 1.0
-  save:
+  store:
     enabled: true
     name: ENTITY_ITEM_PICKUP
     volume: 0.8
     pitch: 1.2
+  unequip:
+    enabled: true
+    name: ITEM_ARMOR_EQUIP_LEATHER
+    volume: 0.8
+    pitch: 1.0
   fail:
     enabled: true
     name: ENTITY_VILLAGER_NO
     volume: 0.7
     pitch: 1.0
 
-# How each set slot is drawn. A saved set's icon is its own armor item, with this name/lore
-# overlaid. Placeholders: %number% (slot number), %pieces% (the pieces in the set).
-set-icon:
-  name: "&a&lArmor Set #%number%"
-  lore:
-    - "&7Pieces: &f%pieces%"
-    - ""
-    - "&eClick &7to equip &8(swaps with what you're wearing)"
-    - "&eShift-Click &7to take the set out"
-empty-icon:
-  item: 'item_frame name:"&7&lEmpty Slot #%number%"'
-  lore:
-    - "&7No set saved here."
-    - ""
-    - "&eClick &7to store the armor you're wearing"
+# ── Empty piece slot (background shown where a set has no piece) ─────────────────
+empty-slot:
+  item: 'light_gray_stained_glass_pane name:" "'
 
-pages:
-  - page: 1
-    mask:
-      items:
-        - gray_stained_glass_pane
-      pattern:
-        - "111111111"
-        - "100000001"
-        - "100000001"
-        - "100000001"
-        - "100000001"
-        - "111111111"
-
-slots:
-  - item: barrier name:"&c&lClose"
+# ── Control dyes ───────────────────────────────────────────────────────────────
+dye:
+  store:
+    item: 'gray_dye name:"&7&lStore Current Setup"'
     lore:
-      - "&7Close this menu."
-    row: 6
-    column: 5
-    left-click:
-      - id: close_inventory
+      - "&7This slot is empty."
+      - ""
+      - "&7Wear an armor set, then click to"
+      - "&7store it here as setup &f#%number%&7."
+      - ""
+      - "&eClick to store your current armor"
+  equip:
+    item: 'pink_dye name:"&d&lEquip Setup #%number%"'
+    lore:
+      - "&7Pieces: &f%pieces%"
+      - "&7First worn: &f%first_worn%"
+      - ""
+      - "&eClick to equip &7(swaps with what you're wearing)"
+  unequip:
+    item: 'lime_dye name:"&a&lActive Setup"'
+    lore:
+      - "&7This is the setup you're wearing."
+      - "&7First worn: &f%first_worn%"
+      - ""
+      - "&eClick to unequip"
+
+# ── Navigation (bottom row) ─────────────────────────────────────────────────────
+nav:
+  filler: 'gray_stained_glass_pane name:" "'
+  previous:
+    item: 'arrow name:"&e&lPrevious Page"'
+    slot: 45
+  next:
+    item: 'arrow name:"&e&lNext Page"'
+    slot: 53
+  close:
+    item: 'barrier name:"&c&lClose"'
+    slot: 49
