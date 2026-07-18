@@ -19,7 +19,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # JDK 25: NoHunger compiles against paper-api 26.2, whose artifact is Java 25
+      # JDK 25: this plugin compiles against paper-api 26.2, whose artifact is Java 25
       # bytecode — a Java 21 javac can't read it.
       - name: Set up JDK 25
         uses: actions/setup-java@v4

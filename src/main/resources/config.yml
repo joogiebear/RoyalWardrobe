@@ -50,8 +50,5 @@ wardrobe:
   # wardrobe per player. Blank it to force per-player everywhere.
   scope-placeholder: "%royalskyblock_profile_id%"
 
-# ── Messages ───────────────────────────────────────────────────────────────────
-# Chat feedback for wardrobe actions. Menu text (buttons, lore) lives in gui/wardrobe.yml.
-
-# Player-facing text lives in messages.yml.
+# Chat feedback lives in messages.yml; menu text (buttons, lore) lives in gui/wardrobe.yml.
 

@@ -5,7 +5,6 @@ name: Weekly Release
 # UTC times and gate on the real Central hour inside the job.
 #
 # NOTE: this is the PRIVATE variant — GitHub Release only, no Modrinth publish.
-# NoHunger is a self-use plugin and is deliberately not distributed publicly.
 on:
   schedule:
     - cron: '0 15 * * 5'   # 10:00 Central during CDT (summer)
