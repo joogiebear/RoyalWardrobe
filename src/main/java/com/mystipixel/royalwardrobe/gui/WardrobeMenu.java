@@ -205,14 +205,58 @@ public final class WardrobeMenu {
             newCursor = currentEmpty ? null : current.clone();
             set.pieces()[row] = cursor.clone();
         }
+        player.setItemOnCursor(newCursor);       // server-side now, so there's no dupe window
         persist(holder, setIndex);
         render(player, holder);
-        // Setting the cursor inside a cancelled click desyncs the client; apply it next tick.
+        // Re-assert the cursor next tick so the client display resyncs after the cancelled click.
         plugin.getServer().getScheduler().runTask(plugin, () -> {
             if (player.isOnline()) {
                 player.setItemOnCursor(newCursor);
             }
         });
+    }
+
+    /**
+     * Shift-click deposit: drop one armor piece from the player's inventory into the first empty slot
+     * of the matching row on the current page (skipping the locked active column). Returns true if it
+     * was placed (the caller then removes one from the source stack). Keeps everything a single-item move.
+     */
+    public boolean tryDeposit(Player player, WardrobeHolder holder, ItemStack item) {
+        if (item == null || item.getType().isAir()) {
+            return false;
+        }
+        int row = armorRow(item);
+        if (row < 0) {
+            return false;                        // not a wearable armor piece
+        }
+        WardrobeData data = holder.data();
+        int page = holder.page();
+        for (int c = 0; c < columns; c++) {
+            int setIndex = page * columns + c;
+            if (data.activeIndex() == setIndex) {
+                continue;                        // active column is locked
+            }
+            ItemStack existing = data.set(setIndex).piece(row);
+            if (existing == null || existing.getType().isAir()) {
+                ItemStack one = item.clone();
+                one.setAmount(1);
+                data.set(setIndex).pieces()[row] = one;
+                persist(holder, setIndex);
+                render(player, holder);
+                playSound(player, "store");
+                return true;
+            }
+        }
+        return false;                            // no empty matching slot on this page
+    }
+
+    private static int armorRow(ItemStack item) {
+        for (int row = 0; row < ArmorSet.SIZE; row++) {
+            if (isArmorForRow(item, row)) {
+                return row;
+            }
+        }
+        return -1;
     }
 
     private void handleDye(Player player, WardrobeHolder holder, int setIndex) {
