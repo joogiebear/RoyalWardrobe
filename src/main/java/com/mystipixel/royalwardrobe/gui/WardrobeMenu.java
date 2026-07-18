@@ -439,15 +439,30 @@ public final class WardrobeMenu {
         };
     }
 
+    /**
+     * Persist one slot. Snapshots on the main thread (the live array keeps being mutated by clicks)
+     * and queues the write on storage's single writer thread, so writes for the same slot can't
+     * commit out of order and a shutdown drains them instead of dropping them.
+     */
     private void persist(WardrobeHolder holder, int index) {
         WardrobeData data = holder.data();
         UUID owner = holder.owner();
         String scope = holder.scope();
-        ArmorSet set = data.set(index);
+        ArmorSet snapshot = data.set(index).snapshot();
         long firstWorn = data.firstWorn(index);
         boolean active = data.activeIndex() == index;
-        plugin.getServer().getScheduler().runTaskAsynchronously(plugin,
-                () -> plugin.storage().save(owner, scope, index, set, firstWorn, active));
+        java.util.UUID viewer = holder.owner();
+        plugin.storage().submit(() -> {
+            if (!plugin.storage().save(owner, scope, index, snapshot, firstWorn, active)) {
+                // Never fail silently — the gear is unaccounted for and the player must know.
+                plugin.getServer().getScheduler().runTask(plugin, () -> {
+                    Player online = plugin.getServer().getPlayer(viewer);
+                    if (online != null) {
+                        message(online, "save-failed");
+                    }
+                });
+            }
+        });
     }
 
     private ItemStack item(String itemPath, String def, String lorePath, Map<String, String> ph) {

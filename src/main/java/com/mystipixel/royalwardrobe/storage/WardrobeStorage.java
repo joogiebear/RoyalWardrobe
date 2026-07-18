@@ -17,6 +17,9 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.Locale;
 import java.util.UUID;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 
 /**
@@ -32,6 +35,14 @@ public final class WardrobeStorage {
     private final JavaPlugin plugin;
     private Type type;
     private HikariDataSource dataSource;
+
+    /**
+     * All writes go through ONE thread, so saves for the same slot can never commit out of order —
+     * two rapid clicks on the same column used to race on the pooled scheduler and the older state
+     * could land last. It is also the drain point: {@link #shutdown()} waits for queued writes before
+     * closing the pool, so a stop can't discard a save the player already saw succeed.
+     */
+    private ExecutorService writer;
 
     public WardrobeStorage(JavaPlugin plugin) {
         this.plugin = plugin;
@@ -77,6 +88,11 @@ public final class WardrobeStorage {
             }
 
             this.dataSource = new HikariDataSource(hikari);
+            this.writer = Executors.newSingleThreadExecutor(r -> {
+                Thread t = new Thread(r, "RoyalWardrobe-writer");
+                t.setDaemon(false);              // must finish its queue before the JVM exits
+                return t;
+            });
             createTables();
             plugin.getLogger().info("RoyalWardrobe connected to " + type + " storage.");
             return true;
@@ -160,12 +176,24 @@ public final class WardrobeStorage {
         return new WardrobeData(sets, firstWorn, activeIndex);
     }
 
-    /** Upsert one slot. An empty, never-worn, inactive slot is deleted instead. */
-    public void save(UUID owner, String scope, int idx, ArmorSet set, long firstWorn, boolean active) {
+    /** Queue a write on the single writer thread. Ordering per slot is guaranteed; drained on shutdown. */
+    public void submit(Runnable write) {
+        if (writer == null || writer.isShutdown()) {
+            write.run();                         // fall back to the caller rather than drop the write
+            return;
+        }
+        writer.execute(write);
+    }
+
+    /**
+     * Upsert one slot. An empty, never-worn, inactive slot is deleted instead.
+     * Returns whether it actually committed — callers must not treat a failed write as success,
+     * because wardrobe gear only exists in one place at a time.
+     */
+    public boolean save(UUID owner, String scope, int idx, ArmorSet set, long firstWorn, boolean active) {
         boolean empty = set == null || set.isEmpty();
         if (!active && empty && firstWorn <= 0) {
-            delete(owner, scope, idx);
-            return;
+            return delete(owner, scope, idx);
         }
         String armor = active || empty ? "" : ItemCodec.encode(set.pieces());
         String sql = type == Type.MYSQL
@@ -182,12 +210,15 @@ public final class WardrobeStorage {
             st.setLong(5, Math.max(0, firstWorn));
             st.setInt(6, active ? 1 : 0);
             st.executeUpdate();
+            return true;
         } catch (Exception e) {
-            plugin.getLogger().log(Level.WARNING, "Failed to save wardrobe slot " + idx + " for " + owner, e);
+            // SEVERE, not WARNING: a lost wardrobe write means real gear is unaccounted for.
+            plugin.getLogger().log(Level.SEVERE, "Failed to save wardrobe slot " + idx + " for " + owner, e);
+            return false;
         }
     }
 
-    private void delete(UUID owner, String scope, int idx) {
+    private boolean delete(UUID owner, String scope, int idx) {
         try (Connection c = dataSource.getConnection();
              PreparedStatement st = c.prepareStatement(
                      "DELETE FROM wardrobe_sets WHERE owner = ? AND scope = ? AND idx = ?")) {
@@ -195,12 +226,26 @@ public final class WardrobeStorage {
             st.setString(2, scope);
             st.setInt(3, idx);
             st.executeUpdate();
+            return true;
         } catch (Exception e) {
-            plugin.getLogger().log(Level.WARNING, "Failed to delete wardrobe slot " + idx + " for " + owner, e);
+            plugin.getLogger().log(Level.SEVERE, "Failed to delete wardrobe slot " + idx + " for " + owner, e);
+            return false;
         }
     }
 
+    /** Drain queued writes BEFORE closing the pool, so a shutdown never discards a committed action. */
     public void shutdown() {
+        if (writer != null) {
+            writer.shutdown();
+            try {
+                if (!writer.awaitTermination(10, TimeUnit.SECONDS)) {
+                    plugin.getLogger().warning("Wardrobe writes still pending after 10s — forcing shutdown.");
+                    writer.shutdownNow();
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }
         if (dataSource != null && !dataSource.isClosed()) {
             dataSource.close();
         }

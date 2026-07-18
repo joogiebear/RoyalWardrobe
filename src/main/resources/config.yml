@@ -12,7 +12,9 @@
 # SQLITE (zero-setup, single server) or MYSQL (recommended for a network). Same dual-dialect
 # layer as the rest of the suite; the driver + pool load at runtime via Paper's library loader.
 storage:
-  type: MYSQL
+  # SQLITE works out of the box with no setup. Switch to MYSQL (and fill in the block below)
+  # if you run a network, or want the wardrobe in the same database as the rest of the suite.
+  type: SQLITE
   sqlite-file: "wardrobe.db"
   mysql:
     host: localhost
@@ -58,4 +60,5 @@ messages:
   no-armor: "&cYou aren't wearing any armor to store."
   already-active: "&cYou're already wearing a saved setup — unequip it first."
   slot-locked: "&cThat wardrobe slot is locked. Unlock more with a rank or perk."
+  save-failed: "&cYour wardrobe could not be saved — tell an admin before changing more sets."
   inventory-full: "&cMake room in your inventory first."

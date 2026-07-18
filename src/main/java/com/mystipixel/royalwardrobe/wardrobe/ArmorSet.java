@@ -31,6 +31,19 @@ public final class ArmorSet {
         return new ArmorSet(new ItemStack[SIZE]);
     }
 
+    /**
+     * A detached deep copy. Persistence must snapshot on the main thread before handing a set to the
+     * writer — serializing the live array while the player keeps clicking would capture a half-applied
+     * state, or a state that never existed.
+     */
+    public ArmorSet snapshot() {
+        ItemStack[] copy = new ItemStack[SIZE];
+        for (int i = 0; i < SIZE; i++) {
+            copy[i] = pieces[i] == null ? null : pieces[i].clone();
+        }
+        return new ArmorSet(copy);
+    }
+
     /** The backing array (length 4, nulls allowed). Mutating it mutates the set — intended for swaps. */
     public ItemStack[] pieces() {
         return pieces;
