@@ -5,6 +5,10 @@ import com.mystipixel.royalwardrobe.message.MessageManager;
 import com.mystipixel.royalwardrobe.gui.WardrobeMenuListener;
 import com.mystipixel.royalwardrobe.scope.ScopeResolver;
 import com.mystipixel.royalwardrobe.storage.WardrobeStorage;
+import java.util.Locale;
+
+import org.bstats.bukkit.Metrics;
+import org.bstats.charts.SimplePie;
 import org.bukkit.plugin.java.JavaPlugin;
 
 /**
@@ -15,6 +19,9 @@ import org.bukkit.plugin.java.JavaPlugin;
  * Real gear is moved, never copied, so there is no way to duplicate a stat item.
  */
 public final class RoyalWardrobePlugin extends JavaPlugin {
+
+    /** bStats project id. Identifies the plugin, not the server, so it is fixed rather than configurable. */
+    private static final int BSTATS_PLUGIN_ID = 32731;
 
     private WardrobeStorage storage;
     private ScopeResolver scopes;
@@ -39,6 +46,7 @@ public final class RoyalWardrobePlugin extends JavaPlugin {
             getCommand("wardrobe").setExecutor(new com.mystipixel.royalwardrobe.command.WardrobeCommand(this));
         }
 
+        setupMetrics();
         getLogger().info("RoyalWardrobe enabled — capacity " + capacity() + " sets, scope: "
                 + (scopes.perProfile() ? "per-profile (RoyalSkyblock)" : "per-player") + ".");
     }
@@ -70,4 +78,19 @@ public final class RoyalWardrobePlugin extends JavaPlugin {
     public WardrobeMenu menu() {
         return menu;
     }
+    /**
+     * Anonymous usage reporting via bStats.
+     *
+     * <p>Server owners who want no reporting disable it globally in plugins/bStats/config.yml, which
+     * is the mechanism bStats provides; the id itself is fixed because it names this plugin's project.
+     */
+    private void setupMetrics() {
+        Metrics metrics = new Metrics(this, BSTATS_PLUGIN_ID);
+        metrics.addCustomChart(new SimplePie("storage_backend",
+                () -> getConfig().getString("storage.type", "SQLITE").toUpperCase(Locale.ROOT)));
+        metrics.addCustomChart(new SimplePie("wardrobe_capacity", () -> String.valueOf(capacity())));
+        metrics.addCustomChart(new SimplePie("scope",
+                () -> getConfig().getString("wardrobe.scope", "global")));
+    }
+
 }
