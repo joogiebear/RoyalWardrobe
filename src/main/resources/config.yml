@@ -1,78 +1,37 @@
 # ═══════════════════════════════════════════════════════════════════════════════
-#  RoyalWardrobe  ·  Configuration
+#  RoyalWardrobe  ·  Main Configuration
 # ═══════════════════════════════════════════════════════════════════════════════
-#  Store armor sets and swap between them from a GUI (Hypixel-style).
+#  Store armor sets and swap between them from a GUI (Hypixel-style). Gear is MOVED,
+#  never copied, so stat items can never be duplicated.
 #
-#  How it works: gear is MOVED, never copied (so stat items can't be duplicated).
-#    - Click a SAVED set  -> you put it on, and the armor you were wearing drops
-#                            into that slot (a swap — click again to swap back).
-#    - Click an EMPTY slot -> the armor you're wearing is stored there (you take
-#                            it off in the process — it's now on the shelf).
-#    - Shift-click a saved set -> take that set out into your inventory.
+#  The wardrobe MENU — layout, slots, icons, sounds — lives in gui/wardrobe.yml, in the
+#  same EcoMenus dialect as the rest of the Royal suite. Reload both with /wardrobe reload.
 # ═══════════════════════════════════════════════════════════════════════════════
-
-wardrobe:
-  # How a player's wardrobe is scoped. If this placeholder resolves (RoyalSkyblock +
-  # PlaceholderAPI installed), each profile gets its own wardrobe; otherwise it's one
-  # wardrobe per player. Blank it to force per-player everywhere.
-  scope-placeholder: "%royalskyblock_profile_id%"
 
 # ── Storage ────────────────────────────────────────────────────────────────────
-# sqlite (default, zero-setup) or mysql (recommended for a network). Same dual-dialect
-# layer as the rest of the Royal suite; drivers load at runtime via Paper's library loader.
+# SQLITE (zero-setup, single server) or MYSQL (recommended for a network). Same dual-dialect
+# layer as the rest of the suite; the driver + pool load at runtime via Paper's library loader.
 storage:
-  type: sqlite
-  sqlite-file: wardrobe.db
+  type: MYSQL
+  sqlite-file: "wardrobe.db"
   mysql:
     host: localhost
     port: 3306
     database: royalwardrobe
     username: root
     password: ""
-    pool-size: 10
     properties: "useSSL=false&characterEncoding=utf8&allowPublicKeyRetrieval=true"
+    pool-size: 10
 
-# ── GUI ────────────────────────────────────────────────────────────────────────
-gui:
-  title: "&8Wardrobe"
-  rows: 6
-  # Inventory slots (0-based) where armor sets appear, in order. The NUMBER of slots here
-  # is your wardrobe capacity — add or remove slots to change how many sets a player gets.
-  set-slots: [10, 11, 12, 13, 14, 15, 16,
-              19, 20, 21, 22, 23, 24, 25,
-              28, 29, 30, 31, 32, 33, 34]
-  filler:
-    enabled: true
-    material: GRAY_STAINED_GLASS_PANE
-  close:
-    slot: 49
-    material: BARRIER
-    name: "&cClose"
-  # A saved set's icon is the set's own armor item, with this name/lore overlaid.
-  set-icon:
-    name: "&aArmor Set #%number%"
-    lore:
-      - "&7Pieces: &f%pieces%"
-      - ""
-      - "&eClick &7to equip (swaps with what you're wearing)"
-      - "&eShift-click &7to take the set out"
-  empty-icon:
-    material: ITEM_FRAME
-    name: "&7Empty Slot #%number%"
-    lore:
-      - "&7No set saved here."
-      - ""
-      - "&eClick &7to store the armor you're wearing"
-  # Sound keys are Minecraft namespaced ids (see the wiki). Blank a value to silence it.
-  sounds:
-    open: "block.chest.open"
-    equip: "item.armor.equip_diamond"
-    save: "entity.item.pickup"
-    empty: "block.note_block.bass"
-    volume: 1.0
-    pitch: 1.0
+# ── Scoping ────────────────────────────────────────────────────────────────────
+wardrobe:
+  # How a player's wardrobe is scoped. If this placeholder resolves (RoyalSkyblock +
+  # PlaceholderAPI installed) each profile gets its own wardrobe; otherwise it's one
+  # wardrobe per player. Blank it to force per-player everywhere.
+  scope-placeholder: "%royalskyblock_profile_id%"
 
 # ── Messages ───────────────────────────────────────────────────────────────────
+# Chat feedback. %number% = the set slot number. Menu text lives in gui/wardrobe.yml.
 messages:
   prefix: "&6Wardrobe &8» &r"
   equipped: "&aEquipped set #%number%."

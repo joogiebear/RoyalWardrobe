@@ -1,0 +1,81 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+#  RoyalWardrobe · Wardrobe menu      EcoMenus dialect (shared with the Royal suite)
+# ═══════════════════════════════════════════════════════════════════════════════
+#  The mask '0' slots are your armor-set slots — the plugin fills them in order, so the
+#  NUMBER of '0's is your wardrobe capacity. '1' slots are the filler item.
+#
+#  How each set slot works (gear is MOVED, never copied — no dupes):
+#    Click a SAVED set   -> wear it; the armor you had on drops into that slot (a swap).
+#    Click an EMPTY slot  -> the armor you're wearing is stored there.
+#    Shift-click a set    -> take it back out into your inventory.
+#
+#  Fixed slots take left-click / right-click effect lists. Effects:
+#    close_inventory
+#    play_sound   args: { sound: <NAME>, volume: <n>, pitch: <n> }
+#
+#  Item syntax (same as the rest of the suite):  <material> [hide_attributes] name:"&a..."
+# ═══════════════════════════════════════════════════════════════════════════════
+
+title: "&8&lWardrobe"
+rows: 6
+
+# Sounds the plugin plays for wardrobe actions (suite extension to the dialect).
+sounds:
+  open:
+    enabled: true
+    name: BLOCK_CHEST_OPEN
+    volume: 0.7
+    pitch: 1.2
+  equip:
+    enabled: true
+    name: ITEM_ARMOR_EQUIP_DIAMOND
+    volume: 0.8
+    pitch: 1.0
+  save:
+    enabled: true
+    name: ENTITY_ITEM_PICKUP
+    volume: 0.8
+    pitch: 1.2
+  fail:
+    enabled: true
+    name: ENTITY_VILLAGER_NO
+    volume: 0.7
+    pitch: 1.0
+
+# How each set slot is drawn. A saved set's icon is its own armor item, with this name/lore
+# overlaid. Placeholders: %number% (slot number), %pieces% (the pieces in the set).
+set-icon:
+  name: "&a&lArmor Set #%number%"
+  lore:
+    - "&7Pieces: &f%pieces%"
+    - ""
+    - "&eClick &7to equip &8(swaps with what you're wearing)"
+    - "&eShift-Click &7to take the set out"
+empty-icon:
+  item: 'item_frame name:"&7&lEmpty Slot #%number%"'
+  lore:
+    - "&7No set saved here."
+    - ""
+    - "&eClick &7to store the armor you're wearing"
+
+pages:
+  - page: 1
+    mask:
+      items:
+        - gray_stained_glass_pane
+      pattern:
+        - "111111111"
+        - "100000001"
+        - "100000001"
+        - "100000001"
+        - "100000001"
+        - "111111111"
+
+slots:
+  - item: barrier name:"&c&lClose"
+    lore:
+      - "&7Close this menu."
+    row: 6
+    column: 5
+    left-click:
+      - id: close_inventory

@@ -31,7 +31,7 @@ public final class WardrobeMenuListener implements Listener {
         }
         // Only clicks in the wardrobe (top) inventory do anything; the cancel above blocks the rest.
         if (event.getClickedInventory().getHolder() instanceof WardrobeHolder) {
-            plugin.menu().handleClick(player, holder, event.getSlot(), event.isShiftClick());
+            plugin.menu().handleClick(player, holder, event.getSlot(), event.isShiftClick(), event.isRightClick());
         }
     }
 

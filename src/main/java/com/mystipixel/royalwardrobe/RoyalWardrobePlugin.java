@@ -47,9 +47,9 @@ public final class RoyalWardrobePlugin extends JavaPlugin {
         }
     }
 
-    /** Number of set slots configured in the GUI — the wardrobe's capacity. */
+    /** Number of set slots in the wardrobe menu (the mask's content region) — the wardrobe's capacity. */
     public int capacity() {
-        return getConfig().getIntegerList("gui.set-slots").size();
+        return menu != null ? menu.capacity() : 0;
     }
 
     public WardrobeStorage storage() {
