@@ -11,6 +11,7 @@ import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
+import org.bukkit.permissions.PermissionAttachmentInfo;
 
 import java.io.File;
 import java.time.Instant;
@@ -66,6 +67,37 @@ public final class WardrobeMenu {
         return columns * pages;
     }
 
+    /**
+     * How many slots a player may use: {@code slots.default}, raised by the highest
+     * {@code <slots.permission>.<n>} they hold ({@code .*} grants the maximum), clamped to the menu's
+     * capacity. Any permission plugin can hand these out with ranks or perks.
+     */
+    public int allowedSlots(Player player) {
+        int max = Math.min(capacity(), plugin.getConfig().getInt("slots.max", capacity()));
+        int allowed = Math.max(0, plugin.getConfig().getInt("slots.default", 1));
+        String prefix = plugin.getConfig().getString("slots.permission", "royalwardrobe.slots")
+                .toLowerCase(Locale.ROOT) + ".";
+        for (PermissionAttachmentInfo info : player.getEffectivePermissions()) {
+            if (!info.getValue()) {
+                continue;                        // explicitly negated
+            }
+            String perm = info.getPermission().toLowerCase(Locale.ROOT);
+            if (!perm.startsWith(prefix)) {
+                continue;
+            }
+            String suffix = perm.substring(prefix.length());
+            if (suffix.equals("*")) {
+                return max;
+            }
+            try {
+                allowed = Math.max(allowed, Integer.parseInt(suffix));
+            } catch (NumberFormatException notANumber) {
+                // e.g. royalwardrobe.slots.something — ignore
+            }
+        }
+        return Math.max(0, Math.min(allowed, max));
+    }
+
     // ── open / paging ──────────────────────────────────────────────────────────────
 
     public void open(Player player) {
@@ -75,7 +107,9 @@ public final class WardrobeMenu {
             WardrobeData data = plugin.storage().load(player.getUniqueId(), scope, capacity);
             plugin.getServer().getScheduler().runTask(plugin, () -> {
                 if (player.isOnline()) {
-                    openPage(player, new WardrobeHolder(player.getUniqueId(), scope, data, 0), 0);
+                    // Resolved once per open, so the layout can't shift mid-session if perms change.
+                    int allowed = allowedSlots(player);
+                    openPage(player, new WardrobeHolder(player.getUniqueId(), scope, data, 0, allowed), 0);
                     playSound(player, "open");
                 }
             });
@@ -110,14 +144,24 @@ public final class WardrobeMenu {
         for (int c = 0; c < columns; c++) {
             int setIndex = page * columns + c;
             boolean active = data.activeIndex() == setIndex;
+            boolean locked = holder.isLocked(setIndex);
             ArmorSet set = active ? wornSet(player) : data.set(setIndex);
             for (int row = 0; row < ArmorSet.SIZE; row++) {
                 ItemStack piece = set.piece(row);
-                inv.setItem(c + row * 9, piece != null && !piece.getType().isAir()
-                        ? piece.clone()
-                        : item("empty-slot.item", "light_gray_stained_glass_pane name:\" \"", null, Map.of()));
+                if (piece != null && !piece.getType().isAir()) {
+                    // Gear is always shown, even in a locked slot, so it stays visible and retrievable
+                    // if the player's allowance shrank (rank expired) — never stranded.
+                    inv.setItem(c + row * 9, piece.clone());
+                } else {
+                    inv.setItem(c + row * 9, locked
+                            ? item("locked-slot.item", "red_stained_glass_pane name:\"&cLocked\"", null, Map.of())
+                            : item("empty-slot.item", "light_gray_stained_glass_pane name:\" \"", null, Map.of()));
+                }
             }
-            inv.setItem(c + DYE_ROW * 9, dyeFor(set, active, setIndex, data));
+            inv.setItem(c + DYE_ROW * 9, locked
+                    ? item("dye.locked.item", "barrier name:\"&c&lLocked Slot\"", "dye.locked.lore",
+                            Map.of("number", Integer.toString(setIndex + 1)))
+                    : dyeFor(set, active, setIndex, data));
         }
 
         int base = NAV_ROW * 9;
@@ -167,7 +211,13 @@ public final class WardrobeMenu {
             if (col >= columns) {
                 return;
             }
-            handleDye(player, holder, holder.page() * columns + col);
+            int setIndex = holder.page() * columns + col;
+            if (holder.isLocked(setIndex)) {
+                playSound(player, "fail");
+                message(player, "slot-locked");
+                return;
+            }
+            handleDye(player, holder, setIndex);
             return;
         }
         if (row == NAV_ROW) {
@@ -198,6 +248,12 @@ public final class WardrobeMenu {
             newCursor = current;
             set.pieces()[row] = null;
         } else {                                 // place the cursor piece, swap the old one out
+            // A locked slot can still be emptied (above), but nothing new goes in.
+            if (holder.isLocked(setIndex)) {
+                playSound(player, "fail");
+                message(player, "slot-locked");
+                return;
+            }
             if (!isArmorForRow(cursor, row)) {
                 playSound(player, "fail");
                 return;
@@ -233,8 +289,8 @@ public final class WardrobeMenu {
         int page = holder.page();
         for (int c = 0; c < columns; c++) {
             int setIndex = page * columns + c;
-            if (data.activeIndex() == setIndex) {
-                continue;                        // active column is locked
+            if (data.activeIndex() == setIndex || holder.isLocked(setIndex)) {
+                continue;                        // active column, or one they haven't unlocked
             }
             ItemStack existing = data.set(setIndex).piece(row);
             if (existing == null || existing.getType().isAir()) {

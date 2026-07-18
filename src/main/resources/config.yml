@@ -23,6 +23,24 @@ storage:
     properties: "useSSL=false&characterEncoding=utf8&allowPublicKeyRetrieval=true"
     pool-size: 10
 
+# ── Slots ──────────────────────────────────────────────────────────────────────
+# How many wardrobe slots a player may use. Slots past their allowance show as locked.
+#
+# Grant more with permissions — the HIGHEST number a player holds wins:
+#   royalwardrobe.slots.3     -> 3 slots
+#   royalwardrobe.slots.*     -> the maximum below
+# Any permission plugin (LuckPerms, a rank, a purchased perk) can hand these out, so
+# other plugins can grant extra slots without RoyalWardrobe knowing about them.
+#
+# Shrinking someone's allowance never strands gear: a locked slot that still holds a
+# set keeps showing it and they can take those pieces back out — they just can't
+# store, equip, or add to a locked slot.
+slots:
+  default: 1
+  permission: royalwardrobe.slots
+  # Hard ceiling. Also bounded by the number of set slots in gui/wardrobe.yml.
+  max: 18
+
 # ── Scoping ────────────────────────────────────────────────────────────────────
 wardrobe:
   # How a player's wardrobe is scoped. If this placeholder resolves (RoyalSkyblock +
@@ -39,4 +57,5 @@ messages:
   unequipped: "&aUnequipped your setup."
   no-armor: "&cYou aren't wearing any armor to store."
   already-active: "&cYou're already wearing a saved setup — unequip it first."
+  slot-locked: "&cThat wardrobe slot is locked. Unlock more with a rank or perk."
   inventory-full: "&cMake room in your inventory first."

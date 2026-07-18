@@ -16,14 +16,28 @@ public final class WardrobeHolder implements InventoryHolder {
     private final UUID owner;
     private final String scope;
     private final WardrobeData data;
+    private final int allowedSlots;
     private int page;
     private Inventory inventory;
 
-    public WardrobeHolder(UUID owner, String scope, WardrobeData data, int page) {
+    public WardrobeHolder(UUID owner, String scope, WardrobeData data, int page, int allowedSlots) {
         this.owner = owner;
         this.scope = scope;
         this.data = data;
         this.page = page;
+        this.allowedSlots = allowedSlots;
+    }
+
+    /**
+     * How many slots this player may use, resolved from permissions when the menu opened. Slots at or
+     * past this index are locked — gear already in them stays retrievable, it just can't be added to.
+     */
+    public int allowedSlots() {
+        return allowedSlots;
+    }
+
+    public boolean isLocked(int setIndex) {
+        return setIndex >= allowedSlots;
     }
 
     public UUID owner() {

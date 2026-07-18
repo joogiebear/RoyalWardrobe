@@ -61,6 +61,10 @@ sounds:
 empty-slot:
   item: 'light_gray_stained_glass_pane name:" "'
 
+# Shown for slots the player hasn't unlocked (see 'slots' in config.yml).
+locked-slot:
+  item: 'red_stained_glass_pane name:"&c&lLocked"'
+
 # ── Control dyes ───────────────────────────────────────────────────────────────
 dye:
   store:
@@ -79,6 +83,12 @@ dye:
       - "&7First worn: &f%first_worn%"
       - ""
       - "&eClick to equip &7(swaps with what you're wearing)"
+  locked:
+    item: 'barrier name:"&c&lLocked Slot #%number%"'
+    lore:
+      - "&7You haven't unlocked this wardrobe slot."
+      - ""
+      - "&7Unlock more slots with a rank or perk."
   unequip:
     item: 'lime_dye name:"&a&lActive Setup"'
     lore:
