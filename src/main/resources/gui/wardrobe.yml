@@ -18,7 +18,7 @@
 #  Placeholders in dye lore: %number% %pieces% %first_worn%
 # ═══════════════════════════════════════════════════════════════════════════════
 
-title: "&8&lWardrobe &7(%page%/%pages%)"
+title: "&8Wardrobe &7(%page%/%pages%)"
 
 # 9 columns = 9 sets per page. pages 2 → 18 sets total. Lower columns-per-page to leave
 # side gaps; raise pages for more sets.
@@ -107,5 +107,5 @@ nav:
     item: 'arrow name:"&e&lNext Page"'
     slot: 53
   close:
-    item: 'barrier name:"&c&lClose"'
+    item: 'barrier name:"&cClose"'
     slot: 49
