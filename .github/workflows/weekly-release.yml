@@ -3,8 +3,6 @@ name: Weekly Release
 # Fires every Friday at 10:00 America/Chicago (Central), DST-safe.
 # GitHub cron is UTC with no DST awareness, so we trigger at both candidate
 # UTC times and gate on the real Central hour inside the job.
-#
-# NOTE: this is the PRIVATE variant — GitHub Release only, no Modrinth publish.
 on:
   schedule:
     - cron: '0 15 * * 5'   # 10:00 Central during CDT (summer)
@@ -49,13 +47,17 @@ jobs:
     needs: gate
     if: needs.gate.outputs.proceed == 'true'
     runs-on: ubuntu-latest
+    env:
+      MODRINTH_TOKEN: ${{ secrets.MODRINTH_TOKEN }}
+      MODRINTH_PROJECT_ID: ${{ vars.MODRINTH_PROJECT_ID }}
+      MODRINTH_LOADERS: ${{ vars.MODRINTH_LOADERS || 'paper' }}
+      GAME_VERSION_PREFIX: ${{ vars.MODRINTH_GAME_VERSION_PREFIX || '1.21' }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      # JDK 25: paper-api 26.2's artifact is Java 25 bytecode (see build.yml).
       - name: Set up JDK 25
         uses: actions/setup-java@v4
         with:
@@ -84,7 +86,7 @@ jobs:
           fi
           echo "release=true" >> "$GITHUB_OUTPUT"
 
-          # Calendar version: YEAR.ISOWEEK.PATCH (matches the rest of the suite, e.g. 2026.29.0)
+          # Calendar version: YEAR.ISOWEEK.PATCH (matches existing scheme, e.g. 2026.28.0)
           YEAR=$(TZ=America/Chicago date +%Y)
           WEEK=$(( 10#$(TZ=America/Chicago date +%V) ))
           PATCH=0
@@ -140,3 +142,7 @@ jobs:
             "${{ steps.jar.outputs.path }}" \
             --title "${{ steps.prep.outputs.version }}" \
             --notes-file RELEASE_NOTES.md
+
+      - name: Publish to Modrinth
+        if: steps.prep.outputs.release == 'true'
+        run: bash .github/release/modrinth.sh "${{ steps.jar.outputs.path }}" "${{ steps.prep.outputs.version }}"
