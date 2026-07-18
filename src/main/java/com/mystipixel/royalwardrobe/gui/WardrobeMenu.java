@@ -130,6 +130,128 @@ public final class WardrobeMenu {
                 .replace("%pages%", Integer.toString(pages));
     }
 
+    /** An admin-defined button: an item at a slot, with the effects its click runs. */
+    private record Button(int index, String spec, List<String> lore, List<Map<?, ?>> effects) {
+    }
+
+    /**
+     * Extra buttons declared in {@code buttons:}. The armour grid is computed rather than authored, so
+     * this is how a menu gains anything beyond the built-in navigation without touching code.
+     */
+    private List<Button> buttons() {
+        List<Button> out = new ArrayList<>();
+        List<Map<?, ?>> raw = gui.getMapList("buttons");
+        for (int i = 0; i < raw.size(); i++) {
+            Map<?, ?> entry = raw.get(i);
+            Object item = entry.get("item");
+            if (item == null) {
+                plugin.getLogger().warning("Button " + i + " in the wardrobe menu has no 'item:' — skipping.");
+                continue;
+            }
+            int index = slotIndexOf(entry, -1);
+            if (index < 0 || index >= SIZE) {
+                plugin.getLogger().warning("Button " + i + " in the wardrobe menu has no valid row/column"
+                        + " or slot — skipping.");
+                continue;
+            }
+            if (index < NAV_ROW * 9) {
+                plugin.getLogger().warning("Button " + i + " sits at slot " + index + ", inside the wardrobe"
+                        + " grid — it will cover a gear slot. Move it to the bottom row if that wasn't intended.");
+            }
+            List<String> lore = new ArrayList<>();
+            Object rawLore = entry.get("lore");
+            if (rawLore instanceof List<?> list) {
+                for (Object line : list) {
+                    lore.add(String.valueOf(line));
+                }
+            }
+            List<Map<?, ?>> effects = new ArrayList<>();
+            Object rawClick = entry.get("left-click");
+            if (rawClick instanceof List<?> list) {
+                for (Object effect : list) {
+                    if (effect instanceof Map<?, ?> map) {
+                        effects.add(map);
+                    }
+                }
+            }
+            out.add(new Button(index, String.valueOf(item), lore, effects));
+        }
+        return out;
+    }
+
+    /** The {@code left-click:} effects configured under a nav entry, empty when it has none. */
+    private List<Map<?, ?>> clickEffects(String path) {
+        List<Map<?, ?>> out = new ArrayList<>();
+        for (Map<?, ?> effect : gui.getMapList(path + ".left-click")) {
+            out.add(effect);
+        }
+        return out;
+    }
+
+    /** row/column (1-indexed) or a raw slot, from an inline config map. */
+    private static int slotIndexOf(Map<?, ?> entry, int def) {
+        Object row = entry.get("row");
+        Object column = entry.get("column");
+        if (row instanceof Number r && column instanceof Number c) {
+            int index = (r.intValue() - 1) * 9 + (c.intValue() - 1);
+            if (c.intValue() >= 1 && c.intValue() <= 9 && index >= 0) {
+                return index;
+            }
+        }
+        Object slot = entry.get("slot");
+        return slot instanceof Number n ? n.intValue() : def;
+    }
+
+    /**
+     * Run a click's configured effects. Same vocabulary as the other Royal menus, so an admin who has
+     * configured one of them already knows this one. Returns false when nothing was configured, letting
+     * the caller fall back to the button's built-in behaviour.
+     */
+    private boolean runEffects(Player player, List<Map<?, ?>> effects) {
+        if (effects == null || effects.isEmpty()) {
+            return false;
+        }
+        for (Map<?, ?> effect : effects) {
+            String id = String.valueOf(effect.get("id")).toLowerCase(Locale.ROOT);
+            Object args = effect.get("args");
+            Map<?, ?> a = args instanceof Map<?, ?> m ? m : Map.of();
+            switch (id) {
+                case "close", "close_inventory" -> player.closeInventory();
+                case "message" -> player.sendMessage(Text.of(arg(a, "message")));
+                case "player_command" -> player.performCommand(arg(a, "command"));
+                case "console_command" -> plugin.getServer().dispatchCommand(
+                        plugin.getServer().getConsoleSender(),
+                        arg(a, "command").replace("%player%", player.getName()));
+                case "play_sound" -> playRawSound(player, arg(a, "sound"),
+                        toFloat(a.get("volume"), 1f), toFloat(a.get("pitch"), 1f));
+                default -> plugin.getLogger().warning("Unknown click id '" + id + "' in the wardrobe menu.");
+            }
+        }
+        return true;
+    }
+
+    /** Play a sound named directly by a click effect, rather than one of the configured sound keys. */
+    private void playRawSound(Player player, String name, float volume, float pitch) {
+        if (name == null || name.isBlank()) {
+            return;
+        }
+        try {
+            player.playSound(player.getLocation(), Sound.valueOf(name.toUpperCase(Locale.ROOT)), volume, pitch);
+        } catch (IllegalArgumentException e) {
+            plugin.getLogger().warning("Unknown sound in a wardrobe button: " + name);
+        }
+    }
+
+    /** A string arg from an effect's args map, or "" when absent. */
+    private static String arg(Map<?, ?> args, String key) {
+        Object value = args.get(key);
+        return value == null ? "" : String.valueOf(value);
+    }
+
+    private static float toFloat(Object value, float def) {
+        return value instanceof Number n ? n.floatValue() : def;
+    }
+
     // ── render ─────────────────────────────────────────────────────────────────────
 
     public void render(Player player, WardrobeHolder holder) {
@@ -172,6 +294,9 @@ public final class WardrobeMenu {
             inv.setItem(navSlot("next", base + 8), item("nav.next.item", "arrow name:\"&eNext Page\"", "nav.next.lore", Map.of()));
         }
         inv.setItem(navSlot("close", base + 4), item("nav.close.item", "barrier name:\"&cClose\"", "nav.close.lore", Map.of()));
+        for (Button button : buttons()) {
+            inv.setItem(button.index(), ItemSpec.parse(button.spec()).build(Map.of(), button.lore()));
+        }
         player.updateInventory();
     }
 
@@ -220,14 +345,29 @@ public final class WardrobeMenu {
             handleDye(player, holder, setIndex);
             return;
         }
+        // Admin-defined buttons are checked first so one can sit on the nav row without being
+        // swallowed by the built-in paging behaviour.
+        for (Button button : buttons()) {
+            if (button.index() == slot) {
+                runEffects(player, button.effects());
+                return;
+            }
+        }
         if (row == NAV_ROW) {
             int base = NAV_ROW * 9;
             if (slot == navSlot("previous", base) && holder.page() > 0) {
-                openPage(player, holder, holder.page() - 1);
+                // A configured left-click replaces the built-in behaviour; without one, page as before.
+                if (!runEffects(player, clickEffects("nav.previous"))) {
+                    openPage(player, holder, holder.page() - 1);
+                }
             } else if (slot == navSlot("next", base + 8) && holder.page() < pages - 1) {
-                openPage(player, holder, holder.page() + 1);
+                if (!runEffects(player, clickEffects("nav.next"))) {
+                    openPage(player, holder, holder.page() + 1);
+                }
             } else if (slot == navSlot("close", base + 4)) {
-                player.closeInventory();
+                if (!runEffects(player, clickEffects("nav.close"))) {
+                    player.closeInventory();
+                }
             }
         }
     }
@@ -508,8 +648,28 @@ public final class WardrobeMenu {
         return b.toString();
     }
 
+    /**
+     * Where a nav button sits. Accepts a {@code row}/{@code column} pair (both 1-indexed, matching how
+     * every other menu in the suite places buttons) or a raw {@code slot} index, so configs written
+     * against the old format keep working. Falls back to {@code def} when neither is set.
+     */
     private int navSlot(String key, int def) {
-        return gui.getInt("nav." + key + ".slot", def);
+        return slotFrom("nav." + key, def);
+    }
+
+    /** Resolve a row/column pair or raw slot under {@code path}, or {@code def} if neither is present. */
+    private int slotFrom(String path, int def) {
+        int row = gui.getInt(path + ".row", -1);
+        int column = gui.getInt(path + ".column", -1);
+        if (row >= 1 && column >= 1 && column <= 9) {
+            int index = (row - 1) * 9 + (column - 1);
+            if (index >= 0 && index < SIZE) {
+                return index;
+            }
+            plugin.getLogger().warning("Menu entry '" + path + "' is at row " + row + ", column " + column
+                    + ", which is outside this menu — using the default slot instead.");
+        }
+        return gui.getInt(path + ".slot", def);
     }
 
     private long now() {
@@ -535,11 +695,18 @@ public final class WardrobeMenu {
         }
     }
 
+    /** Built-in wording for each message, used when messages.yml doesn't define the key. */
+    private static final Map<String, String> DEFAULT_MESSAGES = Map.of(
+            "equipped", "&aEquipped that setup.",
+            "stored", "&aStored your current setup.",
+            "unequipped", "&aUnequipped your setup.",
+            "no-armor", "&cYou aren't wearing any armor to store.",
+            "already-active", "&cYou're already wearing a saved setup — unequip it first.",
+            "slot-locked", "&cThat wardrobe slot is locked. Unlock more with a rank or perk.",
+            "inventory-full", "&cMake room in your inventory first.",
+            "save-failed", "&cYour wardrobe could not be saved — tell an admin before changing more sets.");
+
     private void message(Player player, String key) {
-        String raw = plugin.getConfig().getString("messages." + key, "");
-        if (raw == null || raw.isBlank()) {
-            return;
-        }
-        player.sendMessage(Text.of(plugin.getConfig().getString("messages.prefix", "") + raw));
+        plugin.messages().send(player, key, DEFAULT_MESSAGES.getOrDefault(key, ""));
     }
 }

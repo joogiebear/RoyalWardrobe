@@ -1,0 +1,24 @@
+# RoyalWardrobe - player-facing text.
+#
+# Every message is optional: delete a line and its built-in wording is used instead. Empty a message
+# ("") to silence it entirely. Colour codes use '&'.
+#
+# These used to live under 'messages:' in config.yml. If you had reworded any there, they were copied
+# here automatically on first start and the old section is no longer read.
+
+prefix: "&6Wardrobe &8» &r"
+
+# ---- success ----
+equipped: "&aEquipped that setup."
+stored: "&aStored your current setup."
+unequipped: "&aUnequipped your setup."
+
+# ---- refusals ----
+no-armor: "&cYou aren't wearing any armor to store."
+already-active: "&cYou're already wearing a saved setup — unequip it first."
+slot-locked: "&cThat wardrobe slot is locked. Unlock more with a rank or perk."
+inventory-full: "&cMake room in your inventory first."
+
+# Shown when a wardrobe write fails. Worth keeping loud: it means the set on screen is not what is
+# stored, and continuing to move gear around can lose it.
+save-failed: "&cYour wardrobe could not be saved — tell an admin before changing more sets."

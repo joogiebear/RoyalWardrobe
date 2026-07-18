@@ -98,14 +98,48 @@ dye:
       - "&eClick to unequip"
 
 # ── Navigation (bottom row) ─────────────────────────────────────────────────────
+# Bottom navigation.
+#
+# Buttons are placed by row/column, both 1-indexed, the same as every other Royal menu. A raw
+# 'slot:' index still works if you prefer it, so older configs keep running.
+#
+# Each button may also carry a 'left-click:' list, which REPLACES its built-in behaviour. Leave it
+# off and Previous/Next page and Close behave as normal.
+#   left-click:
+#     - id: play_sound
+#       args: {sound: UI_BUTTON_CLICK, volume: 0.7, pitch: 1.2}
+#     - id: close
+#
+# The gear grid above is computed from columns-per-page/pages rather than authored here, because a
+# column is one saved outfit read top to bottom. Everything else is yours to move.
 nav:
   filler: 'gray_stained_glass_pane name:" "'
   previous:
     item: 'arrow name:"&e&lPrevious Page"'
-    slot: 45
+    row: 6
+    column: 1
   next:
     item: 'arrow name:"&e&lNext Page"'
-    slot: 53
+    row: 6
+    column: 9
   close:
     item: 'barrier name:"&cClose"'
-    slot: 49
+    row: 6
+    column: 5
+
+# Extra buttons. Anything you add here is drawn after the navigation and can run any of:
+#   close (or close_inventory) · message · player_command · console_command · play_sound
+#
+# Example — a button that sends the player to spawn:
+#
+# buttons:
+#   - item: 'ender_pearl name:"&bSpawn"'
+#     lore:
+#       - "&7Return to spawn."
+#     row: 6
+#     column: 3
+#     left-click:
+#       - id: player_command
+#         args: {command: "spawn"}
+#       - id: close
+buttons: []

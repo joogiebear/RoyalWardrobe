@@ -52,13 +52,5 @@ wardrobe:
 
 # ── Messages ───────────────────────────────────────────────────────────────────
 # Chat feedback for wardrobe actions. Menu text (buttons, lore) lives in gui/wardrobe.yml.
-messages:
-  prefix: "&6Wardrobe &8» &r"
-  equipped: "&aEquipped that setup."
-  stored: "&aStored your current setup."
-  unequipped: "&aUnequipped your setup."
-  no-armor: "&cYou aren't wearing any armor to store."
-  already-active: "&cYou're already wearing a saved setup — unequip it first."
-  slot-locked: "&cThat wardrobe slot is locked. Unlock more with a rank or perk."
-  save-failed: "&cYour wardrobe could not be saved — tell an admin before changing more sets."
-  inventory-full: "&cMake room in your inventory first."
+
+# Player-facing text lives in messages.yml.

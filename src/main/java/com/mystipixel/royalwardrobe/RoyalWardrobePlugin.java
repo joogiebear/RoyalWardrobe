@@ -1,6 +1,7 @@
 package com.mystipixel.royalwardrobe;
 
 import com.mystipixel.royalwardrobe.gui.WardrobeMenu;
+import com.mystipixel.royalwardrobe.message.MessageManager;
 import com.mystipixel.royalwardrobe.gui.WardrobeMenuListener;
 import com.mystipixel.royalwardrobe.scope.ScopeResolver;
 import com.mystipixel.royalwardrobe.storage.WardrobeStorage;
@@ -18,6 +19,7 @@ public final class RoyalWardrobePlugin extends JavaPlugin {
     private WardrobeStorage storage;
     private ScopeResolver scopes;
     private WardrobeMenu menu;
+    private MessageManager messages;
 
     @Override
     public void onEnable() {
@@ -29,6 +31,7 @@ public final class RoyalWardrobePlugin extends JavaPlugin {
             return;
         }
         this.scopes = new ScopeResolver(getConfig().getString("wardrobe.scope-placeholder", "%royalskyblock_profile_id%"));
+        this.messages = new MessageManager(this);
         this.menu = new WardrobeMenu(this);
 
         getServer().getPluginManager().registerEvents(new WardrobeMenuListener(this), this);
@@ -58,6 +61,10 @@ public final class RoyalWardrobePlugin extends JavaPlugin {
 
     public ScopeResolver scopes() {
         return scopes;
+    }
+
+    public MessageManager messages() {
+        return messages;
     }
 
     public WardrobeMenu menu() {

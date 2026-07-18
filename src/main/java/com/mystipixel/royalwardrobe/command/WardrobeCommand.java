@@ -27,8 +27,9 @@ public final class WardrobeCommand implements CommandExecutor {
                 return true;
             }
             plugin.reloadConfig();
+            plugin.messages().reload();
             plugin.menu().reload();
-            sender.sendMessage(Text.of("&aRoyalWardrobe config + menu reloaded."));
+            sender.sendMessage(Text.of("&aRoyalWardrobe config, messages + menu reloaded."));
             return true;
         }
         if (!(sender instanceof Player player)) {
