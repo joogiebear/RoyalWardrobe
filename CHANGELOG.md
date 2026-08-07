@@ -1,3 +1,16 @@
+## 2026.32.0 — 2026-08-07
+
+### ✨ Features
+- report anonymous usage stats via bStats (`0e924f7`)
+- place wardrobe nav by row/column and split out messages.yml (`885d6d6`)
+- permission-based wardrobe slot limits (`c807c1a`)
+
+### 🐛 Fixes
+- make wardrobe writes ordered, snapshotted, drained and loud (`ec6e5fa`)
+
+### 📝 Documentation
+- add a README and clear out NoHunger leftovers (`6688354`)
+
 ## 2026.29.0 — 2026-07-18
 
 ### ✨ Features
