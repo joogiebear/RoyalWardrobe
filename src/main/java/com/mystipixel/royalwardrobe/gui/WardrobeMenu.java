@@ -103,7 +103,10 @@ public final class WardrobeMenu {
     public void open(Player player) {
         String scope = plugin.scopes().scopeFor(player);
         int capacity = capacity();
-        plugin.getServer().getScheduler().runTaskAsynchronously(plugin, () -> {
+        // The load goes through the storage writer thread, not the general async pool: queued saves
+        // from the previous session commit strictly before this read, so a fast close-and-reopen can
+        // never build the new session from rows a pending write was about to replace.
+        plugin.storage().submit(() -> {
             WardrobeData data = plugin.storage().load(player.getUniqueId(), scope, capacity);
             plugin.getServer().getScheduler().runTask(plugin, () -> {
                 if (player.isOnline()) {
