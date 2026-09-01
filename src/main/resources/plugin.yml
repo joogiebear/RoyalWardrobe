@@ -1,7 +1,7 @@
 name: RoyalWardrobe
 version: ${version}
 main: com.mystipixel.royalwardrobe.RoyalWardrobePlugin
-api-version: '1.21'
+api-version: '26.2'
 author: Mystipixel
 description: Hypixel-style armor wardrobe — store gear sets and swap between them from a GUI.
 # JDBC driver + connection pool are downloaded at runtime by Paper's library loader.
