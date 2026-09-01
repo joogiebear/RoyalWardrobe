@@ -42,7 +42,7 @@ public final class WardrobeMenuListener implements Listener {
         if (clicked != null && clicked.getHolder() instanceof WardrobeHolder) {
             event.setCancelled(true);
             if (click == ClickType.LEFT || click == ClickType.RIGHT) {
-                plugin.menu().handleClick(player, holder, event.getSlot());
+                plugin.menu().handleClick(player, holder, event.getSlot(), click == ClickType.RIGHT);
             }
             return;
         }

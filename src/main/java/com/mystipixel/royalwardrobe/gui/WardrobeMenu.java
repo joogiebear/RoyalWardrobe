@@ -44,12 +44,14 @@ public final class WardrobeMenu {
     private static final int NAV_ROW = 5;      // bottom navigation row
 
     private final RoyalWardrobePlugin plugin;
+    private final SignInput signInput;
     private FileConfiguration gui;
     private int columns;
     private int pages;
 
-    public WardrobeMenu(RoyalWardrobePlugin plugin) {
+    public WardrobeMenu(RoyalWardrobePlugin plugin, SignInput signInput) {
         this.plugin = plugin;
+        this.signInput = signInput;
         reload();
     }
 
@@ -259,6 +261,9 @@ public final class WardrobeMenu {
 
     public void render(Player player, WardrobeHolder holder) {
         Inventory inv = holder.getInventory();
+        if (inv == null) {
+            return;                              // command-driven session with no open menu
+        }
         ItemStack navFiller = item("nav.filler", "gray_stained_glass_pane name:\" \"", null, Map.of());
         for (int i = 0; i < SIZE; i++) {
             inv.setItem(i, navFiller.clone());
@@ -303,23 +308,30 @@ public final class WardrobeMenu {
         player.updateInventory();
     }
 
+    /** The default or player-given name for a set, used in dyes, lists and messages alike. */
+    public String setName(WardrobeData data, int setIndex) {
+        String custom = data.name(setIndex);
+        return custom != null ? custom : "Setup #" + (setIndex + 1);
+    }
+
     private ItemStack dyeFor(ArmorSet set, boolean active, int setIndex, WardrobeData data) {
         Map<String, String> ph = new HashMap<>();
         ph.put("number", Integer.toString(setIndex + 1));
+        ph.put("set_name", setName(data, setIndex));
         ph.put("pieces", pieces(set));
         ph.put("first_worn", date(data.firstWorn(setIndex)));
         if (active) {
-            return item("dye.unequip.item", "lime_dye name:\"&aActive Setup\"", "dye.unequip.lore", ph);
+            return item("dye.unequip.item", "lime_dye name:\"&aActive: %set_name%\"", "dye.unequip.lore", ph);
         }
         if (set != null && !set.isEmpty()) {
-            return item("dye.equip.item", "pink_dye name:\"&dEquip Setup\"", "dye.equip.lore", ph);
+            return item("dye.equip.item", "pink_dye name:\"&d%set_name%\"", "dye.equip.lore", ph);
         }
         return item("dye.store.item", "gray_dye name:\"&7Store Current Setup\"", "dye.store.lore", ph);
     }
 
     // ── click handling (all clicks are cancelled by the listener; we move items ourselves) ──
 
-    public void handleClick(Player player, WardrobeHolder holder, int slot) {
+    public void handleClick(Player player, WardrobeHolder holder, int slot, boolean rightClick) {
         int row = slot / 9;
         int col = slot % 9;
         WardrobeData data = holder.data();
@@ -345,7 +357,11 @@ public final class WardrobeMenu {
                 message(player, "slot-locked");
                 return;
             }
-            handleDye(player, holder, setIndex);
+            if (rightClick) {
+                rename(player, holder, setIndex);
+            } else {
+                handleDye(player, holder, setIndex);
+            }
             return;
         }
         // Admin-defined buttons are checked first so one can sit on the nav row without being
@@ -458,6 +474,38 @@ public final class WardrobeMenu {
         return -1;
     }
 
+    /**
+     * Right-click on a set's dye: name the set on a sign. Names are what turn "Setup #3" into
+     * "PvP" once a player owns more than a couple of sets. Renaming the active set is allowed —
+     * a name is metadata about the column, not about where its items currently live.
+     */
+    private void rename(Player player, WardrobeHolder holder, int setIndex) {
+        WardrobeData data = holder.data();
+        if (data.activeIndex() != setIndex && data.set(setIndex).isEmpty()) {
+            playSound(player, "fail");
+            message(player, "nothing-to-rename");
+            return;
+        }
+        signInput.request(player,
+                List.of("&8^^^^^^^^^^^^^^^", "&8Name this setup", "&8(blank to cancel)"),
+                typed -> {
+                    if (!player.isOnline()) {
+                        return;
+                    }
+                    if (typed != null && !typed.isBlank()) {
+                        String name = typed.trim();
+                        if (name.length() > 32) {
+                            name = name.substring(0, 32);
+                        }
+                        data.setName(setIndex, name);
+                        persist(holder, setIndex);
+                        message(player, "renamed");
+                        playSound(player, "store");
+                    }
+                    openPage(player, holder, holder.page());
+                });
+    }
+
     private void handleDye(Player player, WardrobeHolder holder, int setIndex) {
         WardrobeData data = holder.data();
         if (data.activeIndex() == setIndex) {
@@ -537,6 +585,86 @@ public final class WardrobeMenu {
         message(player, "unequipped");
     }
 
+    // ── command-driven access (no GUI) ─────────────────────────────────────────────
+
+    /**
+     * Equip a set by index without opening the menu — {@code /wardrobe equip <n>}, keybinds, macros.
+     * Loads through the storage writer thread exactly like {@link #open}, and if the player already
+     * has the wardrobe open it drives their live session instead of a parallel copy, so the open menu
+     * can never go stale against a command. All of {@link #equip}'s safety applies unchanged; render
+     * simply no-ops when there is no inventory.
+     */
+    public void equipDirect(Player player, int setIndex) {
+        String scope = plugin.scopes().scopeFor(player);
+        int capacity = capacity();
+        plugin.storage().submit(() -> {
+            WardrobeData loaded = plugin.storage().load(player.getUniqueId(), scope, capacity);
+            plugin.getServer().getScheduler().runTask(plugin, () -> {
+                if (!player.isOnline()) {
+                    return;
+                }
+                WardrobeHolder holder;
+                if (player.getOpenInventory().getTopInventory().getHolder() instanceof WardrobeHolder open
+                        && open.owner().equals(player.getUniqueId())) {
+                    holder = open;               // live session — keep it authoritative
+                } else {
+                    holder = new WardrobeHolder(player.getUniqueId(), scope, loaded, 0, allowedSlots(player));
+                }
+                WardrobeData data = holder.data();
+                if (setIndex < 0 || setIndex >= data.capacity()) {
+                    playSound(player, "fail");
+                    message(player, "no-such-slot");
+                    return;
+                }
+                if (holder.isLocked(setIndex)) {
+                    playSound(player, "fail");
+                    message(player, "slot-locked");
+                    return;
+                }
+                if (data.activeIndex() == setIndex) {
+                    playSound(player, "fail");
+                    message(player, "already-wearing");
+                    return;
+                }
+                if (data.set(setIndex).isEmpty()) {
+                    playSound(player, "fail");
+                    message(player, "setup-empty");
+                    return;
+                }
+                equip(player, holder, setIndex);
+            });
+        });
+    }
+
+    /** Print the player's sets for {@code /wardrobe list}: index, name, contents, active/locked marks. */
+    public void sendList(Player player) {
+        String scope = plugin.scopes().scopeFor(player);
+        int capacity = capacity();
+        plugin.storage().submit(() -> {
+            WardrobeData data = plugin.storage().load(player.getUniqueId(), scope, capacity);
+            plugin.getServer().getScheduler().runTask(plugin, () -> {
+                if (!player.isOnline()) {
+                    return;
+                }
+                int allowed = allowedSlots(player);
+                player.sendMessage(Text.of("&6&lWardrobe &7— /wardrobe equip <number>"));
+                for (int i = 0; i < data.capacity(); i++) {
+                    boolean active = data.activeIndex() == i;
+                    boolean locked = i >= allowed;
+                    ArmorSet set = data.set(i);
+                    if (!active && set.isEmpty() && data.name(i) == null && locked) {
+                        continue;                // nothing to say about an empty locked slot
+                    }
+                    String state = active ? "&a(wearing)"
+                            : locked ? "&c(locked)"
+                            : set.isEmpty() ? "&8(empty)"
+                            : "&7" + pieces(set);
+                    player.sendMessage(Text.of("&e" + (i + 1) + ". &f" + setName(data, i) + " " + state));
+                }
+            });
+        });
+    }
+
     // ── item / player helpers ────────────────────────────────────────────────────────
 
     private ArmorSet wornSet(Player player) {
@@ -594,9 +722,10 @@ public final class WardrobeMenu {
         ArmorSet snapshot = data.set(index).snapshot();
         long firstWorn = data.firstWorn(index);
         boolean active = data.activeIndex() == index;
+        String name = data.name(index);
         java.util.UUID viewer = holder.owner();
         plugin.storage().submit(() -> {
-            if (!plugin.storage().save(owner, scope, index, snapshot, firstWorn, active)) {
+            if (!plugin.storage().save(owner, scope, index, snapshot, firstWorn, active, name)) {
                 // Never fail silently — the gear is unaccounted for and the player must know.
                 plugin.getServer().getScheduler().runTask(plugin, () -> {
                     Player online = plugin.getServer().getPlayer(viewer);
@@ -699,15 +828,20 @@ public final class WardrobeMenu {
     }
 
     /** Built-in wording for each message, used when messages.yml doesn't define the key. */
-    private static final Map<String, String> DEFAULT_MESSAGES = Map.of(
-            "equipped", "&aEquipped that setup.",
-            "stored", "&aStored your current setup.",
-            "unequipped", "&aUnequipped your setup.",
-            "no-armor", "&cYou aren't wearing any armor to store.",
-            "already-active", "&cYou're already wearing a saved setup — unequip it first.",
-            "slot-locked", "&cThat wardrobe slot is locked. Unlock more with a rank or perk.",
-            "inventory-full", "&cMake room in your inventory first.",
-            "save-failed", "&cYour wardrobe could not be saved — tell an admin before changing more sets.");
+    private static final Map<String, String> DEFAULT_MESSAGES = Map.ofEntries(
+            Map.entry("equipped", "&aEquipped that setup."),
+            Map.entry("stored", "&aStored your current setup."),
+            Map.entry("unequipped", "&aUnequipped your setup."),
+            Map.entry("no-armor", "&cYou aren't wearing any armor to store."),
+            Map.entry("already-active", "&cYou're already wearing a saved setup — unequip it first."),
+            Map.entry("slot-locked", "&cThat wardrobe slot is locked. Unlock more with a rank or perk."),
+            Map.entry("inventory-full", "&cMake room in your inventory first."),
+            Map.entry("save-failed", "&cYour wardrobe could not be saved — tell an admin before changing more sets."),
+            Map.entry("renamed", "&aSetup renamed."),
+            Map.entry("nothing-to-rename", "&cStore a setup there first, then name it."),
+            Map.entry("no-such-slot", "&cNo wardrobe slot with that number."),
+            Map.entry("already-wearing", "&eYou're already wearing that setup."),
+            Map.entry("setup-empty", "&cThat setup is empty."));
 
     private void message(Player player, String key) {
         plugin.messages().send(player, key, DEFAULT_MESSAGES.getOrDefault(key, ""));

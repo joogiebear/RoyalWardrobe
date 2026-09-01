@@ -16,7 +16,7 @@ softdepend:
 commands:
   wardrobe:
     description: Open your armor wardrobe.
-    usage: /wardrobe [reload]
+    usage: /wardrobe [equip <number>|list|reload]
     aliases: [wr, gear]
 permissions:
   royalwardrobe.use:

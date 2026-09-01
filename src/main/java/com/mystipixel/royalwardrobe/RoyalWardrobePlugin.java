@@ -39,11 +39,16 @@ public final class RoyalWardrobePlugin extends JavaPlugin {
         }
         this.scopes = new ScopeResolver(getConfig().getString("wardrobe.scope-placeholder", "%royalskyblock_profile_id%"));
         this.messages = new MessageManager(this);
-        this.menu = new WardrobeMenu(this);
+        com.mystipixel.royalwardrobe.gui.SignInput signInput = new com.mystipixel.royalwardrobe.gui.SignInput(this);
+        getServer().getPluginManager().registerEvents(signInput, this);
+        this.menu = new WardrobeMenu(this, signInput);
 
         getServer().getPluginManager().registerEvents(new WardrobeMenuListener(this), this);
         if (getCommand("wardrobe") != null) {
-            getCommand("wardrobe").setExecutor(new com.mystipixel.royalwardrobe.command.WardrobeCommand(this));
+            com.mystipixel.royalwardrobe.command.WardrobeCommand command =
+                    new com.mystipixel.royalwardrobe.command.WardrobeCommand(this);
+            getCommand("wardrobe").setExecutor(command);
+            getCommand("wardrobe").setTabCompleter(command);
         }
 
         setupMetrics();

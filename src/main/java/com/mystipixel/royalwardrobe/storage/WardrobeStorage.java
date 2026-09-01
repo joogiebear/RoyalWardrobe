@@ -125,6 +125,7 @@ public final class WardrobeStorage {
             // Migrate a pre-existing v1 table (armor only) by adding the columns if they're missing.
             addColumnIfMissing(c, "wardrobe_sets", "first_worn", "BIGINT NOT NULL DEFAULT 0");
             addColumnIfMissing(c, "wardrobe_sets", "active", "INT NOT NULL DEFAULT 0");
+            addColumnIfMissing(c, "wardrobe_sets", "set_name", "VARCHAR(48)");
         }
     }
 
@@ -148,11 +149,12 @@ public final class WardrobeStorage {
     public WardrobeData load(UUID owner, String scope, int capacity) {
         ArmorSet[] sets = new ArmorSet[capacity];
         long[] firstWorn = new long[capacity];
+        String[] names = new String[capacity];
         for (int i = 0; i < capacity; i++) {
             sets[i] = ArmorSet.empty();
         }
         int activeIndex = -1;
-        String sql = "SELECT idx, armor, first_worn, active FROM wardrobe_sets WHERE owner = ? AND scope = ?";
+        String sql = "SELECT idx, armor, first_worn, active, set_name FROM wardrobe_sets WHERE owner = ? AND scope = ?";
         try (Connection c = dataSource.getConnection(); PreparedStatement st = c.prepareStatement(sql)) {
             st.setString(1, owner.toString());
             st.setString(2, scope);
@@ -163,6 +165,7 @@ public final class WardrobeStorage {
                         continue;
                     }
                     firstWorn[idx] = rs.getLong("first_worn");
+                    names[idx] = rs.getString("set_name");
                     if (rs.getInt("active") == 1) {
                         activeIndex = idx;            // items are on the player, not in storage
                     } else {
@@ -173,7 +176,7 @@ public final class WardrobeStorage {
         } catch (Exception e) {
             plugin.getLogger().log(Level.WARNING, "Failed to load wardrobe for " + owner + "/" + scope, e);
         }
-        return new WardrobeData(sets, firstWorn, activeIndex);
+        return new WardrobeData(sets, firstWorn, names, activeIndex);
     }
 
     /** Queue a write on the single writer thread. Ordering per slot is guaranteed; drained on shutdown. */
@@ -186,22 +189,25 @@ public final class WardrobeStorage {
     }
 
     /**
-     * Upsert one slot. An empty, never-worn, inactive slot is deleted instead.
+     * Upsert one slot. An empty, never-worn, inactive, unnamed slot is deleted instead — a name is
+     * data the player typed, so a named-but-empty slot keeps its row.
      * Returns whether it actually committed — callers must not treat a failed write as success,
      * because wardrobe gear only exists in one place at a time.
      */
-    public boolean save(UUID owner, String scope, int idx, ArmorSet set, long firstWorn, boolean active) {
+    public boolean save(UUID owner, String scope, int idx, ArmorSet set, long firstWorn, boolean active,
+                        String name) {
         boolean empty = set == null || set.isEmpty();
-        if (!active && empty && firstWorn <= 0) {
+        if (!active && empty && firstWorn <= 0 && (name == null || name.isBlank())) {
             return delete(owner, scope, idx);
         }
         String armor = active || empty ? "" : ItemCodec.encode(set.pieces());
         String sql = type == Type.MYSQL
-                ? "INSERT INTO wardrobe_sets (owner, scope, idx, armor, first_worn, active) VALUES (?,?,?,?,?,?) "
-                + "ON DUPLICATE KEY UPDATE armor=VALUES(armor), first_worn=VALUES(first_worn), active=VALUES(active)"
-                : "INSERT INTO wardrobe_sets (owner, scope, idx, armor, first_worn, active) VALUES (?,?,?,?,?,?) "
+                ? "INSERT INTO wardrobe_sets (owner, scope, idx, armor, first_worn, active, set_name) VALUES (?,?,?,?,?,?,?) "
+                + "ON DUPLICATE KEY UPDATE armor=VALUES(armor), first_worn=VALUES(first_worn), "
+                + "active=VALUES(active), set_name=VALUES(set_name)"
+                : "INSERT INTO wardrobe_sets (owner, scope, idx, armor, first_worn, active, set_name) VALUES (?,?,?,?,?,?,?) "
                 + "ON CONFLICT(owner, scope, idx) DO UPDATE SET armor=excluded.armor, "
-                + "first_worn=excluded.first_worn, active=excluded.active";
+                + "first_worn=excluded.first_worn, active=excluded.active, set_name=excluded.set_name";
         try (Connection c = dataSource.getConnection(); PreparedStatement st = c.prepareStatement(sql)) {
             st.setString(1, owner.toString());
             st.setString(2, scope);
@@ -209,6 +215,7 @@ public final class WardrobeStorage {
             st.setString(4, armor);
             st.setLong(5, Math.max(0, firstWorn));
             st.setInt(6, active ? 1 : 0);
+            st.setString(7, name == null || name.isBlank() ? null : name);
             st.executeUpdate();
             return true;
         } catch (Exception e) {

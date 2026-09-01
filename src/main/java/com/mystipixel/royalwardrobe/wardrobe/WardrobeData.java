@@ -13,11 +13,13 @@ public final class WardrobeData {
 
     private final ArmorSet[] sets;
     private final long[] firstWorn;
+    private final String[] names;      // player-given set names; null = the default "Setup #N"
     private int activeIndex;
 
-    public WardrobeData(ArmorSet[] sets, long[] firstWorn, int activeIndex) {
+    public WardrobeData(ArmorSet[] sets, long[] firstWorn, String[] names, int activeIndex) {
         this.sets = sets;
         this.firstWorn = firstWorn;
+        this.names = names;
         this.activeIndex = activeIndex;
     }
 
@@ -39,6 +41,15 @@ public final class WardrobeData {
 
     public void setFirstWorn(int index, long millis) {
         firstWorn[index] = millis;
+    }
+
+    /** The player-given name for a set, or null when it still has the default. */
+    public String name(int index) {
+        return names[index];
+    }
+
+    public void setName(int index, String name) {
+        names[index] = name == null || name.isBlank() ? null : name;
     }
 
     public int activeIndex() {

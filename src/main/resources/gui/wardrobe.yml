@@ -15,7 +15,8 @@
 #  (worn) set's column is locked — you can't edit it here. Gear is MOVED, never copied.
 #
 #  Item syntax (same as the rest of the suite): <material> [hide_attributes] name:"&a..."
-#  Placeholders in dye lore: %number% %pieces% %first_worn%
+#  Placeholders in dye names/lore: %number% %set_name% %pieces% %first_worn%
+#  (%set_name% is the player-given name from right-click rename, or "Setup #N".)
 # ═══════════════════════════════════════════════════════════════════════════════
 
 title: "&8Wardrobe &7(%page%/%pages%)"
@@ -77,12 +78,13 @@ dye:
       - ""
       - "&eClick to store your current armor"
   equip:
-    item: 'pink_dye name:"&d&lEquip Setup #%number%"'
+    item: 'pink_dye name:"&d&l%set_name%"'
     lore:
       - "&7Pieces: &f%pieces%"
       - "&7First worn: &f%first_worn%"
       - ""
       - "&eClick to equip &7(swaps with what you're wearing)"
+      - "&8Right-click to rename"
   locked:
     item: 'barrier name:"&c&lLocked Slot #%number%"'
     lore:
@@ -90,10 +92,11 @@ dye:
       - ""
       - "&7Unlock more slots with a rank or perk."
   unequip:
-    item: 'lime_dye name:"&a&lActive Setup"'
+    item: 'lime_dye name:"&a&lActive: %set_name%"'
     lore:
       - "&7This is the setup you're wearing."
       - "&7First worn: &f%first_worn%"
+      - "&8Right-click to rename"
       - ""
       - "&eClick to unequip"
 
