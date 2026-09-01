@@ -4,7 +4,7 @@ A Hypixel-style armour wardrobe. Players store complete gear sets and swap betwe
 instead of juggling armour in their inventory.
 
 Part of the Royal plugin suite. Works standalone; scopes wardrobes per profile when RoyalSkyblock is
-installed.
+installed. Requires Paper 26.2 or newer.
 
 ---
 
