@@ -1,3 +1,14 @@
+## 2026.36.0 — 2026-09-06
+
+### ✨ Features
+- set names and GUI-free equipping (`3949c63`)
+
+### 🐛 Fixes
+- serialize wardrobe loads behind queued saves (`ab71d87`)
+
+### 📝 Documentation
+- state the Paper 26.2-or-newer requirement (`8c3acb3`)
+
 ## 2026.32.0 — 2026-08-07
 
 ### ✨ Features
