@@ -84,6 +84,9 @@ public final class WardrobeSessions implements Listener {
     private void startLoad(UUID id, PendingLoad pending) {
         plugin.storage().submit(() -> {
             WardrobeData data = plugin.storage().load(id, pending.scope, pending.capacity);
+            if (!plugin.isEnabled()) {
+                return;
+            }
             plugin.getServer().getScheduler().runTask(plugin, () -> {
                 if (loading.get(id) != pending) {
                     return;                      // superseded by a quit, a reload or another scope

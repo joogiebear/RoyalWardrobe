@@ -647,7 +647,13 @@ public final class WardrobeMenu {
      * itself in the colours the menu uses for another state, such as the active set's green.
      */
     static String cleanName(String typed) {
-        String name = FORMAT_CODES.matcher(typed).replaceAll("").trim();
+        // Strip until nothing changes: one pass turns "&&aa" into "&a", which is a code again.
+        String name = typed;
+        String stripped;
+        while (!(stripped = FORMAT_CODES.matcher(name).replaceAll("")).equals(name)) {
+            name = stripped;
+        }
+        name = name.trim();
         return name.length() > 32 ? name.substring(0, 32).trim() : name;
     }
 
@@ -849,6 +855,9 @@ public final class WardrobeMenu {
         }
         plugin.storage().submit(() -> {
             boolean saved = plugin.storage().saveAll(owner, scope, writes);
+            if (!plugin.isEnabled()) {
+                return;                          // drained on disable: committed, nobody left to tell
+            }
             plugin.getServer().getScheduler().runTask(plugin, () -> {
                 Player online = plugin.getServer().getPlayer(owner);
                 if (online == null) {

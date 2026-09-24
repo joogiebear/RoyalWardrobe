@@ -14,6 +14,12 @@ class SetNameTest {
     }
 
     @Test
+    void codesHiddenInsideCodesAreStrippedToo() {
+        assertEquals("Tank", WardrobeMenu.cleanName("&&&aaaTank"));
+        assertEquals("Tank", WardrobeMenu.cleanName("&&aaTank"));
+    }
+
+    @Test
     void ordinaryAmpersandsAndPercentsSurvive() {
         assertEquals("Salt & Pepper", WardrobeMenu.cleanName("Salt & Pepper"));
         assertEquals("100% crit", WardrobeMenu.cleanName("100% crit"));
