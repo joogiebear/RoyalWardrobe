@@ -423,10 +423,12 @@ public final class WardrobeMenu {
         player.setItemOnCursor(newCursor);       // server-side now, so there's no dupe window
         persist(holder, setIndex);
         render(player, holder);
-        // Re-assert the cursor next tick so the client display resyncs after the cancelled click.
+        // Resync the client's view next tick, after the cancelled click has been answered. This must
+        // only resend state, never set the cursor again: clicks can land before the task runs, and
+        // re-setting it would hand back a fresh copy of a piece the player already put down.
         plugin.getServer().getScheduler().runTask(plugin, () -> {
             if (player.isOnline()) {
-                player.setItemOnCursor(newCursor);
+                player.updateInventory();
             }
         });
     }
