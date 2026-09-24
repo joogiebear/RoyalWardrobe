@@ -3,6 +3,7 @@ package com.mystipixel.royalwardrobe.gui;
 import com.mystipixel.royalwardrobe.RoyalWardrobePlugin;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
+import org.bukkit.event.EventPriority;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.ClickType;
 import org.bukkit.event.inventory.InventoryClickEvent;
@@ -26,7 +27,9 @@ public final class WardrobeMenuListener implements Listener {
         this.plugin = plugin;
     }
 
-    @EventHandler
+    // HIGHEST: this decides the click's final cancelled state. At the default priority a later
+    // listener could un-cancel it, letting vanilla move items into or out of the grid uncontrolled.
+    @EventHandler(priority = EventPriority.HIGHEST)
     public void onClick(InventoryClickEvent event) {
         if (!(event.getInventory().getHolder() instanceof WardrobeHolder holder)) {
             return;
@@ -76,7 +79,7 @@ public final class WardrobeMenuListener implements Listener {
         // else: plain left/right/drop in the player's own inventory — allowed (needed to pick pieces up).
     }
 
-    @EventHandler
+    @EventHandler(priority = EventPriority.HIGHEST)
     public void onDrag(InventoryDragEvent event) {
         if (!(event.getInventory().getHolder() instanceof WardrobeHolder)) {
             return;
