@@ -69,8 +69,13 @@ public final class WardrobeMenu {
         return columns * pages;
     }
 
-    private int pages() {
-        return pages;
+    /**
+     * Pages needed to show {@code data}: the configured count, or more when sets are stored past it
+     * because the menu was shrunk. Those slots sit past the player's allowance, so they render locked —
+     * their gear stays visible and can be taken out, it just can't be added to.
+     */
+    private int pagesFor(WardrobeData data) {
+        return Math.max(pages, (data.capacity() + columns - 1) / columns);
     }
 
     /**
@@ -131,16 +136,17 @@ public final class WardrobeMenu {
 
     private void openPage(Player player, WardrobeHolder holder, int page) {
         holder.setPage(page);
-        Inventory inv = plugin.getServer().createInventory(holder, SIZE, Text.of(title(page)));
+        Inventory inv = plugin.getServer().createInventory(holder, SIZE,
+                Text.of(title(page, pagesFor(holder.data()))));
         holder.setInventory(inv);
         render(player, holder);
         player.openInventory(inv);
     }
 
-    private String title(int page) {
+    private String title(int page, int totalPages) {
         return gui.getString("title", "&8&lWardrobe (%page%/%pages%)")
                 .replace("%page%", Integer.toString(page + 1))
-                .replace("%pages%", Integer.toString(pages));
+                .replace("%pages%", Integer.toString(totalPages));
     }
 
     /** An admin-defined button: an item at a slot, with the effects its click runs. */
@@ -281,6 +287,9 @@ public final class WardrobeMenu {
         int page = holder.page();
         for (int c = 0; c < columns; c++) {
             int setIndex = page * columns + c;
+            if (setIndex >= data.capacity()) {
+                break;                           // past the last slot on a part-filled final page
+            }
             boolean active = data.activeIndex() == setIndex;
             boolean locked = holder.isLocked(setIndex);
             if (data.isCorrupt(setIndex)) {
@@ -316,7 +325,7 @@ public final class WardrobeMenu {
         if (page > 0) {
             inv.setItem(navSlot("previous", base), item("nav.previous.item", "arrow name:\"&ePrevious Page\"", "nav.previous.lore", Map.of()));
         }
-        if (page < pages - 1) {
+        if (page < pagesFor(data) - 1) {
             inv.setItem(navSlot("next", base + 8), item("nav.next.item", "arrow name:\"&eNext Page\"", "nav.next.lore", Map.of()));
         }
         inv.setItem(navSlot("close", base + 4), item("nav.close.item", "barrier name:\"&cClose\"", "nav.close.lore", Map.of()));
@@ -354,7 +363,10 @@ public final class WardrobeMenu {
         int col = slot % 9;
         WardrobeData data = holder.data();
 
-        if (row <= DYE_ROW && col < columns && data.isCorrupt(holder.page() * columns + col)) {
+        if (row <= DYE_ROW && (col >= columns || holder.page() * columns + col >= data.capacity())) {
+            return;                              // filler: no slot here
+        }
+        if (row <= DYE_ROW && data.isCorrupt(holder.page() * columns + col)) {
             playSound(player, "fail");
             message(player, "slot-corrupt");
             return;
@@ -402,7 +414,7 @@ public final class WardrobeMenu {
                 if (!runEffects(player, clickEffects("nav.previous"))) {
                     openPage(player, holder, holder.page() - 1);
                 }
-            } else if (slot == navSlot("next", base + 8) && holder.page() < pages - 1) {
+            } else if (slot == navSlot("next", base + 8) && holder.page() < pagesFor(data) - 1) {
                 if (!runEffects(player, clickEffects("nav.next"))) {
                     openPage(player, holder, holder.page() + 1);
                 }
@@ -473,6 +485,9 @@ public final class WardrobeMenu {
         int page = holder.page();
         for (int c = 0; c < columns; c++) {
             int setIndex = page * columns + c;
+            if (setIndex >= data.capacity()) {
+                break;
+            }
             if (data.activeIndex() == setIndex || holder.isLocked(setIndex) || data.isCorrupt(setIndex)) {
                 continue;                        // active column, one they haven't unlocked, or unreadable
             }
@@ -531,7 +546,7 @@ public final class WardrobeMenu {
                     boolean announce = named;
                     withSession(player, session -> {
                         openPage(player, new WardrobeHolder(player.getUniqueId(), session.scope(), session.data(),
-                                0, allowedSlots(player)), Math.min(page, pages() - 1));
+                                0, allowedSlots(player)), Math.min(page, pagesFor(session.data()) - 1));
                         if (announce) {
                             message(player, "renamed");
                             playSound(player, "store");

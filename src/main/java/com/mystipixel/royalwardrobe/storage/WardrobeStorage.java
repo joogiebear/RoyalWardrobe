@@ -32,6 +32,9 @@ public final class WardrobeStorage {
 
     private enum Type { SQLITE, MYSQL }
 
+    /** Sanity bound on a stored index, so one bad row can't make a load allocate millions of slots. */
+    private static final int MAX_SLOTS = 9 * 64;
+
     private final JavaPlugin plugin;
     private Type type;
     private HikariDataSource dataSource;
@@ -146,22 +149,22 @@ public final class WardrobeStorage {
         }
     }
 
+    private record Row(int idx, String armor, long firstWorn, boolean active, String name) {
+    }
+
     /**
      * Load a player's wardrobe, or {@code null} if it could not be read.
      *
      * <p>A failed read must never come back as an empty wardrobe: the player would see free slots,
      * store into one, and the upsert would overwrite the real set that is still in the table. A single
      * row that fails to decode is flagged corrupt instead, so the rest of the wardrobe stays usable.
+     *
+     * <p>The result holds at least {@code capacity} slots, and more if sets are stored past it — the
+     * menu having been shrunk since. Those extra slots are shown locked, so their gear can still be
+     * taken out instead of silently vanishing from view.
      */
     public WardrobeData load(UUID owner, String scope, int capacity) {
-        ArmorSet[] sets = new ArmorSet[capacity];
-        long[] firstWorn = new long[capacity];
-        String[] names = new String[capacity];
-        boolean[] corrupt = new boolean[capacity];
-        for (int i = 0; i < capacity; i++) {
-            sets[i] = ArmorSet.empty();
-        }
-        int activeIndex = -1;
+        java.util.List<Row> rows = new java.util.ArrayList<>();
         String sql = "SELECT idx, armor, first_worn, active, set_name FROM wardrobe_sets WHERE owner = ? AND scope = ?";
         try (Connection c = dataSource.getConnection(); PreparedStatement st = c.prepareStatement(sql)) {
             st.setString(1, owner.toString());
@@ -169,28 +172,44 @@ public final class WardrobeStorage {
             try (ResultSet rs = st.executeQuery()) {
                 while (rs.next()) {
                     int idx = rs.getInt("idx");
-                    if (idx < 0 || idx >= capacity) {
-                        continue;
-                    }
-                    firstWorn[idx] = rs.getLong("first_worn");
-                    names[idx] = rs.getString("set_name");
-                    if (rs.getInt("active") == 1) {
-                        activeIndex = idx;            // items are on the player, not in storage
-                        continue;
-                    }
-                    try {
-                        sets[idx] = new ArmorSet(ItemCodec.decode(rs.getString("armor")));
-                    } catch (RuntimeException badRow) {
-                        corrupt[idx] = true;
-                        plugin.getLogger().log(Level.SEVERE, "Wardrobe slot " + idx + " for " + owner + "/"
-                                + scope + " could not be decoded — it is locked and left untouched in the"
-                                + " database.", badRow);
+                    if (idx >= 0 && idx < MAX_SLOTS) {
+                        rows.add(new Row(idx, rs.getString("armor"), rs.getLong("first_worn"),
+                                rs.getInt("active") == 1, rs.getString("set_name")));
                     }
                 }
             }
         } catch (Exception e) {
             plugin.getLogger().log(Level.SEVERE, "Failed to load wardrobe for " + owner + "/" + scope, e);
             return null;
+        }
+
+        int size = capacity;
+        for (Row row : rows) {
+            size = Math.max(size, row.idx() + 1);
+        }
+        ArmorSet[] sets = new ArmorSet[size];
+        long[] firstWorn = new long[size];
+        String[] names = new String[size];
+        boolean[] corrupt = new boolean[size];
+        for (int i = 0; i < size; i++) {
+            sets[i] = ArmorSet.empty();
+        }
+        int activeIndex = -1;
+        for (Row row : rows) {
+            int idx = row.idx();
+            firstWorn[idx] = row.firstWorn();
+            names[idx] = row.name();
+            if (row.active()) {
+                activeIndex = idx;                    // items are on the player, not in storage
+                continue;
+            }
+            try {
+                sets[idx] = new ArmorSet(ItemCodec.decode(row.armor()));
+            } catch (RuntimeException badRow) {
+                corrupt[idx] = true;
+                plugin.getLogger().log(Level.SEVERE, "Wardrobe slot " + idx + " for " + owner + "/" + scope
+                        + " could not be decoded — it is locked and left untouched in the database.", badRow);
+            }
         }
         return new WardrobeData(sets, firstWorn, names, corrupt, activeIndex);
     }
