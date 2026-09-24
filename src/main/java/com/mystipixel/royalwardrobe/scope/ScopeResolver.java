@@ -17,6 +17,11 @@ import java.util.Locale;
  * not {@link #GLOBAL}. The global wardrobe is shared by every profile, so falling back to it would let
  * gear be stored from one profile and taken out in another. No compile-time coupling to either plugin:
  * PlaceholderAPI is only touched when it's installed.
+ *
+ * <p>Once the expansion has been seen, per-profile mode sticks: an expansion that is unregistered at
+ * runtime ({@code /papi reload}, the profile plugin reloading) must refuse wardrobes until it's back,
+ * not quietly fall back to the global one. A restart re-decides, so removing the profile plugin still
+ * returns the server to per-player wardrobes.
  */
 public final class ScopeResolver {
 
@@ -25,17 +30,27 @@ public final class ScopeResolver {
     private final boolean placeholderApi;
     private final String placeholder;
     private final String expansion;
+    private boolean seenExpansion;
 
     public ScopeResolver(String placeholder) {
+        this(placeholder, null);
+    }
+
+    /** As above, keeping {@code previous}'s per-profile latch when the placeholder is unchanged (a reload). */
+    public ScopeResolver(String placeholder, ScopeResolver previous) {
         this.placeholder = placeholder == null ? "" : placeholder.trim();
         this.expansion = expansionOf(this.placeholder);
         this.placeholderApi = Bukkit.getPluginManager().isPluginEnabled("PlaceholderAPI");
+        this.seenExpansion = previous != null && previous.seenExpansion && previous.placeholder.equals(this.placeholder);
     }
 
     /** The scope for {@code player}'s wardrobe, or {@code null} if per-profile and no profile resolves. */
     public String scopeFor(Player player) {
         if (!perProfile()) {
             return GLOBAL;
+        }
+        if (!registered()) {
+            return null;   // per-profile, but the expansion went away: refuse rather than share
         }
         String resolved = me.clip.placeholderapi.PlaceholderAPI.setPlaceholders(player, placeholder);
         if (resolved != null) {
@@ -50,9 +65,19 @@ public final class ScopeResolver {
 
     /**
      * Whether wardrobes are scoped per profile. Checked live rather than at enable, because expansions
-     * register after plugins load.
+     * register after plugins load, and latched once the expansion has been seen.
      */
     public boolean perProfile() {
+        seenExpansion = perProfile(registered(), seenExpansion);
+        return seenExpansion;
+    }
+
+    /** The mode decision: per-profile when the expansion is registered now or was seen before. */
+    static boolean perProfile(boolean registeredNow, boolean seenBefore) {
+        return registeredNow || seenBefore;
+    }
+
+    private boolean registered() {
         return placeholderApi && expansion != null
                 && me.clip.placeholderapi.PlaceholderAPI.isRegistered(expansion);
     }

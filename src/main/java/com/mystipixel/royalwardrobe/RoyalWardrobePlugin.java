@@ -80,7 +80,8 @@ public final class RoyalWardrobePlugin extends JavaPlugin {
 
     /** Re-read wardrobe.scope-placeholder. Open wardrobes must be closed first: their scope may change. */
     public void reloadScopes() {
-        this.scopes = new ScopeResolver(getConfig().getString("wardrobe.scope-placeholder", "%royalskyblock_profile_id%"));
+        this.scopes = new ScopeResolver(getConfig().getString("wardrobe.scope-placeholder", "%royalskyblock_profile_id%"),
+                scopes);   // keep per-profile mode latched across a reload with the same placeholder
     }
 
     public ScopeResolver scopes() {

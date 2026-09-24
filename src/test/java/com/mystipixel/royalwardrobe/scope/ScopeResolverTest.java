@@ -21,4 +21,12 @@ class ScopeResolverTest {
         assertNull(ScopeResolver.expansionOf("%noseparator%"));
         assertNull(ScopeResolver.expansionOf(null));
     }
+
+    @Test
+    void perProfileModeSticksOnceTheExpansionHasBeenSeen() {
+        org.junit.jupiter.api.Assertions.assertFalse(ScopeResolver.perProfile(false, false), "never seen: per-player");
+        org.junit.jupiter.api.Assertions.assertTrue(ScopeResolver.perProfile(true, false));
+        org.junit.jupiter.api.Assertions.assertTrue(ScopeResolver.perProfile(false, true),
+                "an expansion unregistered at runtime must not fall back to the shared wardrobe");
+    }
 }
