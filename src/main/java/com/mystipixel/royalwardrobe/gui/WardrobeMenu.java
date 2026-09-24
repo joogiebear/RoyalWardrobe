@@ -390,7 +390,9 @@ public final class WardrobeMenu {
     /** The default or player-given name for a set, used in dyes, lists and messages alike. */
     public String setName(WardrobeData data, int setIndex) {
         String custom = data.name(setIndex);
-        return custom != null ? custom : "Setup #" + (setIndex + 1);
+        // Cleaned on display too, for names stored before codes were stripped on entry.
+        String clean = custom == null ? "" : cleanName(custom);
+        return !clean.isEmpty() ? clean : "Setup #" + (setIndex + 1);
     }
 
     private ItemStack dyeFor(ArmorSet set, boolean active, int setIndex, WardrobeData data) {
@@ -616,9 +618,9 @@ public final class WardrobeMenu {
                     // (a command, a profile switch). Only name it if this is still the live copy, and
                     // reopen on whatever is live now rather than on the copy captured before.
                     boolean named = false;
-                    if (typed != null && !typed.isBlank()
-                            && plugin.sessions().isLive(holder.owner(), data)) {
-                        data.setName(setIndex, cleanName(typed));
+                    String name = typed == null ? "" : cleanName(typed);
+                    if (!name.isEmpty() && plugin.sessions().isLive(holder.owner(), data)) {
+                        data.setName(setIndex, name);
                         persist(holder, setIndex);
                         named = true;
                     }
@@ -635,10 +637,18 @@ public final class WardrobeMenu {
                 });
     }
 
-    /** A typed set name, trimmed and capped. */
-    private static String cleanName(String typed) {
-        String name = typed.trim();
-        return name.length() > 32 ? name.substring(0, 32) : name;
+    /** Colour and format codes: legacy (&a, &k, §l) and hex (&#rrggbb). */
+    private static final java.util.regex.Pattern FORMAT_CODES =
+            java.util.regex.Pattern.compile("(?i)[&§](#[0-9a-f]{6}|[0-9a-fk-orx])");
+
+    /**
+     * A typed set name as plain text, trimmed and capped. Names are shown inside the menu's own
+     * formatting, so codes are stripped: otherwise a name could scramble itself with &k, or dress
+     * itself in the colours the menu uses for another state, such as the active set's green.
+     */
+    static String cleanName(String typed) {
+        String name = FORMAT_CODES.matcher(typed).replaceAll("").trim();
+        return name.length() > 32 ? name.substring(0, 32).trim() : name;
     }
 
     private void handleDye(Player player, WardrobeHolder holder, int setIndex) {
