@@ -19,13 +19,20 @@ leggings, boots. Below each column is a dye that acts as its button.
 | Pink | Holds a set | Equips it, putting whatever you were wearing back into the slot |
 | Lime | The set you're wearing | Unequips it back into its slot |
 | Red pane | Slot beyond your permission limit | Nothing — but gear already inside stays visible and retrievable |
+| Structure void | A stored set that couldn't be read back | Nothing — it is left untouched for an admin to recover (the console logs which) |
+
+Right-click a set's dye to name it. Names are plain text; colour codes are stripped.
 
 The set you are wearing is locked in place: it can't be edited while active, so a swap can't lose
 half an outfit. Gear is always **moved**, never copied — the active set lives on the player, and its
 saved row is empty until it comes off.
 
 You can also build sets by hand: drag individual pieces into any inactive column, or shift-click a
-piece from your inventory to drop it into the first empty matching slot.
+piece from your inventory to drop it into the first empty matching slot. A piece goes in the row it is
+worn in, so anything the game lets you wear there counts, custom wearables included.
+
+If the wardrobe can't be read (the database is down, say), it stays shut rather than opening empty:
+storing into a slot that only looks free would overwrite the set that is really there.
 
 ---
 
@@ -33,7 +40,10 @@ piece from your inventory to drop it into the first empty matching slot.
 
 ```text
 /wardrobe            Open your wardrobe        (aliases: /wr, /gear)
-/wardrobe reload     Reload config, messages and menu
+/wardrobe equip <n>  Swap to set n without opening the menu (keybind- and macro-friendly)
+/wardrobe list       List your sets
+/wardrobe reload     Reload config, messages, menu and scope; closes open wardrobes first.
+                     Storage settings apply on restart.
 ```
 
 ## Permissions
@@ -85,6 +95,11 @@ wardrobe:
   # Scopes a wardrobe per RoyalSkyblock profile. Blank it for one wardrobe per player.
   scope-placeholder: "%royalskyblock_profile_id%"
 ```
+
+Wardrobes are per profile whenever the placeholder's PlaceholderAPI expansion is registered. In that
+mode a player with no active profile can't open their wardrobe; it deliberately does not fall back to
+a per-player one, which every profile would share, making it a way to carry gear into or out of an
+Ironman profile.
 
 Switching storage backend does **not** migrate existing wardrobes.
 
