@@ -66,6 +66,11 @@ empty-slot:
 locked-slot:
   item: 'red_stained_glass_pane name:"&c&lLocked"'
 
+# A slot whose stored set could not be read back. It is shown as damaged and can't be
+# used, so nothing overwrites the row while an admin recovers it (the console logs which).
+corrupt-slot:
+  item: 'black_stained_glass_pane name:"&4Damaged"'
+
 # ── Control dyes ───────────────────────────────────────────────────────────────
 dye:
   store:
@@ -91,6 +96,13 @@ dye:
       - "&7You haven't unlocked this wardrobe slot."
       - ""
       - "&7Unlock more slots with a rank or perk."
+  corrupt:
+    item: 'structure_void name:"&4&lDamaged Slot #%number%"'
+    lore:
+      - "&7This setup couldn't be read back."
+      - ""
+      - "&7Tell an admin — it has been left"
+      - "&7untouched so it can be recovered."
   unequip:
     item: 'lime_dye name:"&a&lActive: %set_name%"'
     lore:

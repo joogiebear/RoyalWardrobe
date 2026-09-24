@@ -146,10 +146,18 @@ public final class WardrobeStorage {
         }
     }
 
+    /**
+     * Load a player's wardrobe, or {@code null} if it could not be read.
+     *
+     * <p>A failed read must never come back as an empty wardrobe: the player would see free slots,
+     * store into one, and the upsert would overwrite the real set that is still in the table. A single
+     * row that fails to decode is flagged corrupt instead, so the rest of the wardrobe stays usable.
+     */
     public WardrobeData load(UUID owner, String scope, int capacity) {
         ArmorSet[] sets = new ArmorSet[capacity];
         long[] firstWorn = new long[capacity];
         String[] names = new String[capacity];
+        boolean[] corrupt = new boolean[capacity];
         for (int i = 0; i < capacity; i++) {
             sets[i] = ArmorSet.empty();
         }
@@ -168,15 +176,23 @@ public final class WardrobeStorage {
                     names[idx] = rs.getString("set_name");
                     if (rs.getInt("active") == 1) {
                         activeIndex = idx;            // items are on the player, not in storage
-                    } else {
+                        continue;
+                    }
+                    try {
                         sets[idx] = new ArmorSet(ItemCodec.decode(rs.getString("armor")));
+                    } catch (RuntimeException badRow) {
+                        corrupt[idx] = true;
+                        plugin.getLogger().log(Level.SEVERE, "Wardrobe slot " + idx + " for " + owner + "/"
+                                + scope + " could not be decoded — it is locked and left untouched in the"
+                                + " database.", badRow);
                     }
                 }
             }
         } catch (Exception e) {
-            plugin.getLogger().log(Level.WARNING, "Failed to load wardrobe for " + owner + "/" + scope, e);
+            plugin.getLogger().log(Level.SEVERE, "Failed to load wardrobe for " + owner + "/" + scope, e);
+            return null;
         }
-        return new WardrobeData(sets, firstWorn, names, activeIndex);
+        return new WardrobeData(sets, firstWorn, names, corrupt, activeIndex);
     }
 
     /** Queue a write on the single writer thread. Ordering per slot is guaranteed; drained on shutdown. */

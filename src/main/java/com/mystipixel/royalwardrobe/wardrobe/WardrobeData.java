@@ -8,18 +8,23 @@ package com.mystipixel.royalwardrobe.wardrobe;
  * <p><b>Dupe-safety invariant:</b> the active set's real items live on the player, not in
  * {@code sets[activeIndex]} — that entry is empty in storage. Every item therefore exists in exactly
  * one place (on the player if active, in storage otherwise), so a set can never be duplicated.
+ *
+ * <p>A <em>corrupt</em> slot is one whose stored row exists but could not be decoded. It is shown as
+ * unusable and never written to, so the row survives untouched for an admin to recover.
  */
 public final class WardrobeData {
 
     private final ArmorSet[] sets;
     private final long[] firstWorn;
     private final String[] names;      // player-given set names; null = the default "Setup #N"
+    private final boolean[] corrupt;
     private int activeIndex;
 
-    public WardrobeData(ArmorSet[] sets, long[] firstWorn, String[] names, int activeIndex) {
+    public WardrobeData(ArmorSet[] sets, long[] firstWorn, String[] names, boolean[] corrupt, int activeIndex) {
         this.sets = sets;
         this.firstWorn = firstWorn;
         this.names = names;
+        this.corrupt = corrupt;
         this.activeIndex = activeIndex;
     }
 
@@ -58,6 +63,11 @@ public final class WardrobeData {
 
     public void setActiveIndex(int index) {
         this.activeIndex = index;
+    }
+
+    /** Whether this slot's stored row failed to decode — it must be neither shown as empty nor saved over. */
+    public boolean isCorrupt(int index) {
+        return corrupt[index];
     }
 
     public boolean isActive(int index) {

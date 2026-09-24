@@ -111,6 +111,9 @@ public final class WardrobeMenu {
         plugin.storage().submit(() -> {
             WardrobeData data = plugin.storage().load(player.getUniqueId(), scope, capacity);
             plugin.getServer().getScheduler().runTask(plugin, () -> {
+                if (player.isOnline() && refuseIfUnloaded(player, data)) {
+                    return;
+                }
                 if (player.isOnline()) {
                     // Resolved once per open, so the layout can't shift mid-session if perms change.
                     int allowed = allowedSlots(player);
@@ -275,6 +278,16 @@ public final class WardrobeMenu {
             int setIndex = page * columns + c;
             boolean active = data.activeIndex() == setIndex;
             boolean locked = holder.isLocked(setIndex);
+            if (data.isCorrupt(setIndex)) {
+                // Its stored row is unreadable: show it as damaged, never as an empty slot to fill.
+                for (int row = 0; row < ArmorSet.SIZE; row++) {
+                    inv.setItem(c + row * 9, item("corrupt-slot.item",
+                            "black_stained_glass_pane name:\"&4Damaged\"", null, Map.of()));
+                }
+                inv.setItem(c + DYE_ROW * 9, item("dye.corrupt.item", "structure_void name:\"&4&lDamaged Slot\"",
+                        "dye.corrupt.lore", Map.of("number", Integer.toString(setIndex + 1))));
+                continue;
+            }
             ArmorSet set = active ? wornSet(player) : data.set(setIndex);
             for (int row = 0; row < ArmorSet.SIZE; row++) {
                 ItemStack piece = set.piece(row);
@@ -336,6 +349,11 @@ public final class WardrobeMenu {
         int col = slot % 9;
         WardrobeData data = holder.data();
 
+        if (row <= DYE_ROW && col < columns && data.isCorrupt(holder.page() * columns + col)) {
+            playSound(player, "fail");
+            message(player, "slot-corrupt");
+            return;
+        }
         if (row < ArmorSet.SIZE) {
             if (col >= columns) {
                 return;
@@ -450,8 +468,8 @@ public final class WardrobeMenu {
         int page = holder.page();
         for (int c = 0; c < columns; c++) {
             int setIndex = page * columns + c;
-            if (data.activeIndex() == setIndex || holder.isLocked(setIndex)) {
-                continue;                        // active column, or one they haven't unlocked
+            if (data.activeIndex() == setIndex || holder.isLocked(setIndex) || data.isCorrupt(setIndex)) {
+                continue;                        // active column, one they haven't unlocked, or unreadable
             }
             ItemStack existing = data.set(setIndex).piece(row);
             if (existing == null || existing.getType().isAir()) {
@@ -602,7 +620,7 @@ public final class WardrobeMenu {
         plugin.storage().submit(() -> {
             WardrobeData loaded = plugin.storage().load(player.getUniqueId(), scope, capacity);
             plugin.getServer().getScheduler().runTask(plugin, () -> {
-                if (!player.isOnline()) {
+                if (!player.isOnline() || refuseIfUnloaded(player, loaded)) {
                     return;
                 }
                 WardrobeHolder holder;
@@ -616,6 +634,11 @@ public final class WardrobeMenu {
                 if (setIndex < 0 || setIndex >= data.capacity()) {
                     playSound(player, "fail");
                     message(player, "no-such-slot");
+                    return;
+                }
+                if (data.isCorrupt(setIndex)) {
+                    playSound(player, "fail");
+                    message(player, "slot-corrupt");
                     return;
                 }
                 if (holder.isLocked(setIndex)) {
@@ -645,7 +668,7 @@ public final class WardrobeMenu {
         plugin.storage().submit(() -> {
             WardrobeData data = plugin.storage().load(player.getUniqueId(), scope, capacity);
             plugin.getServer().getScheduler().runTask(plugin, () -> {
-                if (!player.isOnline()) {
+                if (!player.isOnline() || refuseIfUnloaded(player, data)) {
                     return;
                 }
                 int allowed = allowedSlots(player);
@@ -654,10 +677,11 @@ public final class WardrobeMenu {
                     boolean active = data.activeIndex() == i;
                     boolean locked = i >= allowed;
                     ArmorSet set = data.set(i);
-                    if (!active && set.isEmpty() && data.name(i) == null && locked) {
+                    if (!active && set.isEmpty() && data.name(i) == null && locked && !data.isCorrupt(i)) {
                         continue;                // nothing to say about an empty locked slot
                     }
                     String state = active ? "&a(wearing)"
+                            : data.isCorrupt(i) ? "&4(damaged — ask an admin)"
                             : locked ? "&c(locked)"
                             : set.isEmpty() ? "&8(empty)"
                             : "&7" + pieces(set);
@@ -665,6 +689,19 @@ public final class WardrobeMenu {
                 }
             });
         });
+    }
+
+    /**
+     * Tell the player their wardrobe could not be read and stop. An unreadable wardrobe must not be
+     * shown as an empty one — storing into a "free" slot would overwrite the set still in the table.
+     */
+    private boolean refuseIfUnloaded(Player player, WardrobeData data) {
+        if (data != null) {
+            return false;
+        }
+        playSound(player, "fail");
+        message(player, "load-failed");
+        return true;
     }
 
     // ── item / player helpers ────────────────────────────────────────────────────────
@@ -843,7 +880,9 @@ public final class WardrobeMenu {
             Map.entry("nothing-to-rename", "&cStore a setup there first, then name it."),
             Map.entry("no-such-slot", "&cNo wardrobe slot with that number."),
             Map.entry("already-wearing", "&eYou're already wearing that setup."),
-            Map.entry("setup-empty", "&cThat setup is empty."));
+            Map.entry("setup-empty", "&cThat setup is empty."),
+            Map.entry("load-failed", "&cYour wardrobe couldn't be loaded right now. Try again shortly."),
+            Map.entry("slot-corrupt", "&cThat wardrobe slot is damaged and can't be used — tell an admin."));
 
     private void message(Player player, String key) {
         plugin.messages().send(player, key, DEFAULT_MESSAGES.getOrDefault(key, ""));
