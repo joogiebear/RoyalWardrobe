@@ -842,7 +842,8 @@ public final class WardrobeMenu {
      * separately left a window where only one was stored. With {@code savePlayer}, the owner's player
      * file is saved as soon as the write commits. The table and the player file still can't commit
      * atomically together, but this shrinks the gap a crash can fall into from the next autosave,
-     * minutes away, to a single tick.
+     * minutes away, to about a second. Saves are coalesced per player, so spam-clicking writes the
+     * player file once a second rather than once per click.
      */
     private void persist(WardrobeHolder holder, boolean savePlayer, int... indexes) {
         WardrobeData data = holder.data();
@@ -867,10 +868,27 @@ public final class WardrobeMenu {
                     // Never fail silently — the gear is unaccounted for and the player must know.
                     message(online, "save-failed");
                 } else if (savePlayer) {
-                    online.saveData();
+                    savePlayerSoon(owner);
                 }
             });
         });
+    }
+
+    /** Players with a player-file save already scheduled; see {@link #persist}. */
+    private final java.util.Set<UUID> pendingPlayerSaves = new java.util.HashSet<>();
+    private static final long PLAYER_SAVE_DELAY_TICKS = 20L;
+
+    private void savePlayerSoon(UUID owner) {
+        if (!pendingPlayerSaves.add(owner)) {
+            return;   // one is already on its way and will include this change
+        }
+        plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
+            pendingPlayerSaves.remove(owner);
+            Player online = plugin.getServer().getPlayer(owner);
+            if (online != null) {
+                online.saveData();   // gone offline: the server saved them on quit
+            }
+        }, PLAYER_SAVE_DELAY_TICKS);
     }
 
     private void persist(WardrobeHolder holder, int index) {
