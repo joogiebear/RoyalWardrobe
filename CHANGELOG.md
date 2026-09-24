@@ -1,3 +1,12 @@
+## 2026.39.2 — 2026-09-24
+
+### 🐛 Fixes
+- keep per-profile wardrobes when the profile expansion drops out (`da3b910`)
+- use the ISO week-year for release versions (`ec409bb`)
+
+### ⚡ Performance
+- coalesce the player-file save after wardrobe equips (`bacb52e`)
+
 ## 2026.39.1 — 2026-09-24
 
 ### 🐛 Fixes
