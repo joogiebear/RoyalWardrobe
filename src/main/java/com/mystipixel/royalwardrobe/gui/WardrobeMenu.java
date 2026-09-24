@@ -69,6 +69,10 @@ public final class WardrobeMenu {
         return columns * pages;
     }
 
+    private int pages() {
+        return pages;
+    }
+
     /**
      * How many slots a player may use: {@code slots.default}, raised by the highest
      * {@code <slots.permission>.<n>} they hold ({@code .*} grants the maximum), clamped to the menu's
@@ -103,24 +107,25 @@ public final class WardrobeMenu {
     // ── open / paging ──────────────────────────────────────────────────────────────
 
     public void open(Player player) {
+        withSession(player, session -> {
+            // Resolved once per open, so the layout can't shift mid-session if perms change.
+            int allowed = allowedSlots(player);
+            openPage(player, new WardrobeHolder(player.getUniqueId(), session.scope(), session.data(), 0, allowed), 0);
+            playSound(player, "open");
+        });
+    }
+
+    /**
+     * Run {@code action} against the player's live wardrobe (see {@link WardrobeSessions}), loading it
+     * behind any queued writes if it isn't in memory yet. A wardrobe that can't be read is refused
+     * outright rather than shown empty — storing into a "free" slot would overwrite the set still in
+     * the table.
+     */
+    private void withSession(Player player, java.util.function.Consumer<WardrobeSessions.Session> action) {
         String scope = plugin.scopes().scopeFor(player);
-        int capacity = capacity();
-        // The load goes through the storage writer thread, not the general async pool: queued saves
-        // from the previous session commit strictly before this read, so a fast close-and-reopen can
-        // never build the new session from rows a pending write was about to replace.
-        plugin.storage().submit(() -> {
-            WardrobeData data = plugin.storage().load(player.getUniqueId(), scope, capacity);
-            plugin.getServer().getScheduler().runTask(plugin, () -> {
-                if (player.isOnline() && refuseIfUnloaded(player, data)) {
-                    return;
-                }
-                if (player.isOnline()) {
-                    // Resolved once per open, so the layout can't shift mid-session if perms change.
-                    int allowed = allowedSlots(player);
-                    openPage(player, new WardrobeHolder(player.getUniqueId(), scope, data, 0, allowed), 0);
-                    playSound(player, "open");
-                }
-            });
+        plugin.sessions().with(player, scope, capacity(), action, () -> {
+            playSound(player, "fail");
+            message(player, "load-failed");
         });
     }
 
@@ -512,18 +517,33 @@ public final class WardrobeMenu {
                     if (!player.isOnline()) {
                         return;
                     }
-                    if (typed != null && !typed.isBlank()) {
-                        String name = typed.trim();
-                        if (name.length() > 32) {
-                            name = name.substring(0, 32);
-                        }
-                        data.setName(setIndex, name);
+                    // The menu was closed for the sign, so the wardrobe may have changed meanwhile
+                    // (a command, a profile switch). Only name it if this is still the live copy, and
+                    // reopen on whatever is live now rather than on the copy captured before.
+                    boolean named = false;
+                    if (typed != null && !typed.isBlank()
+                            && plugin.sessions().isLive(holder.owner(), data)) {
+                        data.setName(setIndex, cleanName(typed));
                         persist(holder, setIndex);
-                        message(player, "renamed");
-                        playSound(player, "store");
+                        named = true;
                     }
-                    openPage(player, holder, holder.page());
+                    int page = holder.page();
+                    boolean announce = named;
+                    withSession(player, session -> {
+                        openPage(player, new WardrobeHolder(player.getUniqueId(), session.scope(), session.data(),
+                                0, allowedSlots(player)), Math.min(page, pages() - 1));
+                        if (announce) {
+                            message(player, "renamed");
+                            playSound(player, "store");
+                        }
+                    });
                 });
+    }
+
+    /** A typed set name, trimmed and capped. */
+    private static String cleanName(String typed) {
+        String name = typed.trim();
+        return name.length() > 32 ? name.substring(0, 32) : name;
     }
 
     private void handleDye(Player player, WardrobeHolder holder, int setIndex) {
@@ -609,99 +629,70 @@ public final class WardrobeMenu {
 
     /**
      * Equip a set by index without opening the menu — {@code /wardrobe equip <n>}, keybinds, macros.
-     * Loads through the storage writer thread exactly like {@link #open}, and if the player already
-     * has the wardrobe open it drives their live session instead of a parallel copy, so the open menu
-     * can never go stale against a command. All of {@link #equip}'s safety applies unchanged; render
-     * simply no-ops when there is no inventory.
+     * Works on the same live wardrobe as the menu, so an open menu and a command can never disagree.
+     * All of {@link #equip}'s safety applies unchanged; render simply no-ops when there is no inventory.
      */
     public void equipDirect(Player player, int setIndex) {
-        String scope = plugin.scopes().scopeFor(player);
-        int capacity = capacity();
-        plugin.storage().submit(() -> {
-            WardrobeData loaded = plugin.storage().load(player.getUniqueId(), scope, capacity);
-            plugin.getServer().getScheduler().runTask(plugin, () -> {
-                if (!player.isOnline() || refuseIfUnloaded(player, loaded)) {
-                    return;
-                }
-                WardrobeHolder holder;
-                if (player.getOpenInventory().getTopInventory().getHolder() instanceof WardrobeHolder open
-                        && open.owner().equals(player.getUniqueId())) {
-                    holder = open;               // live session — keep it authoritative
-                } else {
-                    holder = new WardrobeHolder(player.getUniqueId(), scope, loaded, 0, allowedSlots(player));
-                }
-                WardrobeData data = holder.data();
-                if (setIndex < 0 || setIndex >= data.capacity()) {
-                    playSound(player, "fail");
-                    message(player, "no-such-slot");
-                    return;
-                }
-                if (data.isCorrupt(setIndex)) {
-                    playSound(player, "fail");
-                    message(player, "slot-corrupt");
-                    return;
-                }
-                if (holder.isLocked(setIndex)) {
-                    playSound(player, "fail");
-                    message(player, "slot-locked");
-                    return;
-                }
-                if (data.activeIndex() == setIndex) {
-                    playSound(player, "fail");
-                    message(player, "already-wearing");
-                    return;
-                }
-                if (data.set(setIndex).isEmpty()) {
-                    playSound(player, "fail");
-                    message(player, "setup-empty");
-                    return;
-                }
-                equip(player, holder, setIndex);
-            });
+        withSession(player, session -> {
+            WardrobeHolder holder;
+            if (player.getOpenInventory().getTopInventory().getHolder() instanceof WardrobeHolder open
+                    && open.data() == session.data()) {
+                holder = open;                   // redraw the menu they're looking at
+            } else {
+                holder = new WardrobeHolder(player.getUniqueId(), session.scope(), session.data(), 0,
+                        allowedSlots(player));
+            }
+            WardrobeData data = holder.data();
+            if (setIndex < 0 || setIndex >= data.capacity()) {
+                playSound(player, "fail");
+                message(player, "no-such-slot");
+                return;
+            }
+            if (data.isCorrupt(setIndex)) {
+                playSound(player, "fail");
+                message(player, "slot-corrupt");
+                return;
+            }
+            if (holder.isLocked(setIndex)) {
+                playSound(player, "fail");
+                message(player, "slot-locked");
+                return;
+            }
+            if (data.activeIndex() == setIndex) {
+                playSound(player, "fail");
+                message(player, "already-wearing");
+                return;
+            }
+            if (data.set(setIndex).isEmpty()) {
+                playSound(player, "fail");
+                message(player, "setup-empty");
+                return;
+            }
+            equip(player, holder, setIndex);
         });
     }
 
     /** Print the player's sets for {@code /wardrobe list}: index, name, contents, active/locked marks. */
     public void sendList(Player player) {
-        String scope = plugin.scopes().scopeFor(player);
-        int capacity = capacity();
-        plugin.storage().submit(() -> {
-            WardrobeData data = plugin.storage().load(player.getUniqueId(), scope, capacity);
-            plugin.getServer().getScheduler().runTask(plugin, () -> {
-                if (!player.isOnline() || refuseIfUnloaded(player, data)) {
-                    return;
+        withSession(player, session -> {
+            WardrobeData data = session.data();
+            int allowed = allowedSlots(player);
+            player.sendMessage(Text.of("&6&lWardrobe &7— /wardrobe equip <number>"));
+            for (int i = 0; i < data.capacity(); i++) {
+                boolean active = data.activeIndex() == i;
+                boolean locked = i >= allowed;
+                ArmorSet set = data.set(i);
+                if (!active && set.isEmpty() && data.name(i) == null && locked && !data.isCorrupt(i)) {
+                    continue;                    // nothing to say about an empty locked slot
                 }
-                int allowed = allowedSlots(player);
-                player.sendMessage(Text.of("&6&lWardrobe &7— /wardrobe equip <number>"));
-                for (int i = 0; i < data.capacity(); i++) {
-                    boolean active = data.activeIndex() == i;
-                    boolean locked = i >= allowed;
-                    ArmorSet set = data.set(i);
-                    if (!active && set.isEmpty() && data.name(i) == null && locked && !data.isCorrupt(i)) {
-                        continue;                // nothing to say about an empty locked slot
-                    }
-                    String state = active ? "&a(wearing)"
-                            : data.isCorrupt(i) ? "&4(damaged — ask an admin)"
-                            : locked ? "&c(locked)"
-                            : set.isEmpty() ? "&8(empty)"
-                            : "&7" + pieces(set);
-                    player.sendMessage(Text.of("&e" + (i + 1) + ". &f" + setName(data, i) + " " + state));
-                }
-            });
+                String state = active ? "&a(wearing)"
+                        : data.isCorrupt(i) ? "&4(damaged — ask an admin)"
+                        : locked ? "&c(locked)"
+                        : set.isEmpty() ? "&8(empty)"
+                        : "&7" + pieces(set);
+                player.sendMessage(Text.of("&e" + (i + 1) + ". &f" + setName(data, i) + " " + state));
+            }
         });
-    }
-
-    /**
-     * Tell the player their wardrobe could not be read and stop. An unreadable wardrobe must not be
-     * shown as an empty one — storing into a "free" slot would overwrite the set still in the table.
-     */
-    private boolean refuseIfUnloaded(Player player, WardrobeData data) {
-        if (data != null) {
-            return false;
-        }
-        playSound(player, "fail");
-        message(player, "load-failed");
-        return true;
     }
 
     // ── item / player helpers ────────────────────────────────────────────────────────

@@ -3,6 +3,7 @@ package com.mystipixel.royalwardrobe;
 import com.mystipixel.royalwardrobe.gui.WardrobeMenu;
 import com.mystipixel.royalwardrobe.message.MessageManager;
 import com.mystipixel.royalwardrobe.gui.WardrobeMenuListener;
+import com.mystipixel.royalwardrobe.gui.WardrobeSessions;
 import com.mystipixel.royalwardrobe.scope.ScopeResolver;
 import com.mystipixel.royalwardrobe.storage.WardrobeStorage;
 import java.util.Locale;
@@ -26,6 +27,7 @@ public final class RoyalWardrobePlugin extends JavaPlugin {
     private WardrobeStorage storage;
     private ScopeResolver scopes;
     private WardrobeMenu menu;
+    private WardrobeSessions sessions;
     private MessageManager messages;
 
     @Override
@@ -39,6 +41,8 @@ public final class RoyalWardrobePlugin extends JavaPlugin {
         }
         this.scopes = new ScopeResolver(getConfig().getString("wardrobe.scope-placeholder", "%royalskyblock_profile_id%"));
         this.messages = new MessageManager(this);
+        this.sessions = new WardrobeSessions(this);
+        getServer().getPluginManager().registerEvents(sessions, this);
         com.mystipixel.royalwardrobe.gui.SignInput signInput = new com.mystipixel.royalwardrobe.gui.SignInput(this);
         getServer().getPluginManager().registerEvents(signInput, this);
         this.menu = new WardrobeMenu(this, signInput);
@@ -83,6 +87,11 @@ public final class RoyalWardrobePlugin extends JavaPlugin {
     public WardrobeMenu menu() {
         return menu;
     }
+
+    public WardrobeSessions sessions() {
+        return sessions;
+    }
+
     /**
      * Anonymous usage reporting via bStats.
      *
