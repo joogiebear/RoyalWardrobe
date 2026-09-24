@@ -9,7 +9,6 @@ import com.mystipixel.royalwardrobe.wardrobe.WardrobeActions;
 import com.mystipixel.royalwardrobe.wardrobe.WardrobeData;
 import io.papermc.paper.datacomponent.DataComponentTypes;
 import io.papermc.paper.datacomponent.item.Equippable;
-import org.bukkit.Sound;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
@@ -275,11 +274,44 @@ public final class WardrobeMenu {
         if (name == null || name.isBlank()) {
             return;
         }
-        try {
-            player.playSound(player.getLocation(), Sound.valueOf(name.toUpperCase(Locale.ROOT)), volume, pitch);
-        } catch (IllegalArgumentException e) {
-            plugin.getLogger().warning("Unknown sound in a wardrobe button: " + name);
+        playNamedSound(player, name, volume, pitch);
+    }
+
+    /** Sound names as configs write them (BLOCK_CHEST_OPEN) → their registry keys (block.chest.open). */
+    private static Map<String, String> soundKeys;
+    private final java.util.Set<String> unknownSounds = new java.util.HashSet<>();
+
+    /**
+     * Play a sound named in config. Accepts the classic constant style ({@code BLOCK_CHEST_OPEN}) that
+     * every existing config uses, or a namespaced key ({@code minecraft:block.chest.open}, or a
+     * resource pack's own). Replaces {@code Sound.valueOf}, which Paper has marked for removal.
+     */
+    private void playNamedSound(Player player, String name, float volume, float pitch) {
+        String key;
+        if (name.indexOf('.') >= 0 || name.indexOf(':') >= 0) {
+            key = name.toLowerCase(Locale.ROOT);
+        } else {
+            key = soundKeys().get(name.toUpperCase(Locale.ROOT));
+            if (key == null) {
+                if (unknownSounds.add(name)) {
+                    plugin.getLogger().warning("Unknown sound in the wardrobe menu: " + name);
+                }
+                return;
+            }
         }
+        player.playSound(player.getLocation(), key, volume, pitch);
+    }
+
+    private static Map<String, String> soundKeys() {
+        if (soundKeys == null) {
+            Map<String, String> keys = new HashMap<>();
+            io.papermc.paper.registry.RegistryAccess.registryAccess()
+                    .getRegistry(io.papermc.paper.registry.RegistryKey.SOUND_EVENT)
+                    .keyStream()
+                    .forEach(key -> keys.put(key.getKey().toUpperCase(Locale.ROOT).replace('.', '_'), key.asString()));
+            soundKeys = keys;
+        }
+        return soundKeys;
     }
 
     /** A string arg from an effect's args map, or "" when absent. */
@@ -907,13 +939,8 @@ public final class WardrobeMenu {
         if (name == null || name.isBlank()) {
             return;
         }
-        try {
-            player.playSound(player.getLocation(), Sound.valueOf(name.toUpperCase(Locale.ROOT)),
-                    (float) gui.getDouble("sounds." + key + ".volume", 1.0),
-                    (float) gui.getDouble("sounds." + key + ".pitch", 1.0));
-        } catch (IllegalArgumentException e) {
-            plugin.getLogger().warning("Unknown GUI sound: " + name);
-        }
+        playNamedSound(player, name, (float) gui.getDouble("sounds." + key + ".volume", 1.0),
+                (float) gui.getDouble("sounds." + key + ".pitch", 1.0));
     }
 
     /** Built-in wording for each message, used when messages.yml doesn't define the key. */
