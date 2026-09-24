@@ -54,16 +54,16 @@ public final class ArmorSet {
     }
 
     public boolean isEmpty() {
-        return Arrays.stream(pieces).allMatch(p -> p == null || p.getType().isAir());
+        return Arrays.stream(pieces).allMatch(p -> p == null || p.isEmpty());
     }
 
     /** A representative icon item for the GUI: the chestplate if present, else the first non-empty piece. */
     public ItemStack icon() {
-        if (pieces[CHEST] != null && !pieces[CHEST].getType().isAir()) {
+        if (pieces[CHEST] != null && !pieces[CHEST].isEmpty()) {
             return pieces[CHEST];
         }
         for (ItemStack p : pieces) {
-            if (p != null && !p.getType().isAir()) {
+            if (p != null && !p.isEmpty()) {
                 return p;
             }
         }
