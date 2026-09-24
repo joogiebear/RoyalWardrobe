@@ -223,19 +223,57 @@ public final class WardrobeStorage {
         writer.execute(write);
     }
 
+    /** One slot's full state, as {@link #saveAll} writes it. */
+    public record SlotWrite(int idx, ArmorSet set, long firstWorn, boolean active, String name) {
+    }
+
     /**
-     * Upsert one slot. An empty, never-worn, inactive, unnamed slot is deleted instead — a name is
-     * data the player typed, so a named-but-empty slot keeps its row.
+     * Write several slots in one transaction: all of them commit or none do. An equip moves gear
+     * out of one slot and into another, and committing those separately let a crash in between leave
+     * only half the move stored.
      * Returns whether it actually committed — callers must not treat a failed write as success,
      * because wardrobe gear only exists in one place at a time.
      */
-    public boolean save(UUID owner, String scope, int idx, ArmorSet set, long firstWorn, boolean active,
-                        String name) {
-        boolean empty = set == null || set.isEmpty();
-        if (!active && empty && firstWorn <= 0 && (name == null || name.isBlank())) {
-            return delete(owner, scope, idx);
+    public boolean saveAll(UUID owner, String scope, java.util.List<SlotWrite> writes) {
+        try (Connection c = dataSource.getConnection()) {
+            boolean autoCommit = c.getAutoCommit();
+            c.setAutoCommit(false);
+            try {
+                for (SlotWrite write : writes) {
+                    write(c, owner, scope, write);
+                }
+                c.commit();
+                return true;
+            } catch (Exception e) {
+                c.rollback();
+                throw e;
+            } finally {
+                c.setAutoCommit(autoCommit);
+            }
+        } catch (Exception e) {
+            // SEVERE, not WARNING: a lost wardrobe write means real gear is unaccounted for.
+            plugin.getLogger().log(Level.SEVERE, "Failed to save wardrobe slots for " + owner + "/" + scope, e);
+            return false;
         }
-        String armor = active || empty ? "" : ItemCodec.encode(set.pieces());
+    }
+
+    /**
+     * Upsert one slot. An empty, never-worn, inactive, unnamed slot is deleted instead — a name is
+     * data the player typed, so a named-but-empty slot keeps its row.
+     */
+    private void write(Connection c, UUID owner, String scope, SlotWrite w) throws SQLException {
+        boolean empty = w.set() == null || w.set().isEmpty();
+        if (!w.active() && empty && w.firstWorn() <= 0 && (w.name() == null || w.name().isBlank())) {
+            try (PreparedStatement st = c.prepareStatement(
+                    "DELETE FROM wardrobe_sets WHERE owner = ? AND scope = ? AND idx = ?")) {
+                st.setString(1, owner.toString());
+                st.setString(2, scope);
+                st.setInt(3, w.idx());
+                st.executeUpdate();
+            }
+            return;
+        }
+        String armor = w.active() || empty ? "" : ItemCodec.encode(w.set().pieces());
         String sql = type == Type.MYSQL
                 ? "INSERT INTO wardrobe_sets (owner, scope, idx, armor, first_worn, active, set_name) VALUES (?,?,?,?,?,?,?) "
                 + "ON DUPLICATE KEY UPDATE armor=VALUES(armor), first_worn=VALUES(first_worn), "
@@ -243,35 +281,15 @@ public final class WardrobeStorage {
                 : "INSERT INTO wardrobe_sets (owner, scope, idx, armor, first_worn, active, set_name) VALUES (?,?,?,?,?,?,?) "
                 + "ON CONFLICT(owner, scope, idx) DO UPDATE SET armor=excluded.armor, "
                 + "first_worn=excluded.first_worn, active=excluded.active, set_name=excluded.set_name";
-        try (Connection c = dataSource.getConnection(); PreparedStatement st = c.prepareStatement(sql)) {
+        try (PreparedStatement st = c.prepareStatement(sql)) {
             st.setString(1, owner.toString());
             st.setString(2, scope);
-            st.setInt(3, idx);
+            st.setInt(3, w.idx());
             st.setString(4, armor);
-            st.setLong(5, Math.max(0, firstWorn));
-            st.setInt(6, active ? 1 : 0);
-            st.setString(7, name == null || name.isBlank() ? null : name);
+            st.setLong(5, Math.max(0, w.firstWorn()));
+            st.setInt(6, w.active() ? 1 : 0);
+            st.setString(7, w.name() == null || w.name().isBlank() ? null : w.name());
             st.executeUpdate();
-            return true;
-        } catch (Exception e) {
-            // SEVERE, not WARNING: a lost wardrobe write means real gear is unaccounted for.
-            plugin.getLogger().log(Level.SEVERE, "Failed to save wardrobe slot " + idx + " for " + owner, e);
-            return false;
-        }
-    }
-
-    private boolean delete(UUID owner, String scope, int idx) {
-        try (Connection c = dataSource.getConnection();
-             PreparedStatement st = c.prepareStatement(
-                     "DELETE FROM wardrobe_sets WHERE owner = ? AND scope = ? AND idx = ?")) {
-            st.setString(1, owner.toString());
-            st.setString(2, scope);
-            st.setInt(3, idx);
-            st.executeUpdate();
-            return true;
-        } catch (Exception e) {
-            plugin.getLogger().log(Level.SEVERE, "Failed to delete wardrobe slot " + idx + " for " + owner, e);
-            return false;
         }
     }
 

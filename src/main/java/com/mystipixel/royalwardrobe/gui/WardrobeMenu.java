@@ -2,8 +2,10 @@ package com.mystipixel.royalwardrobe.gui;
 
 import com.mystipixel.royalwardrobe.RoyalWardrobePlugin;
 import com.mystipixel.royalwardrobe.gui.menu.ItemSpec;
+import com.mystipixel.royalwardrobe.storage.WardrobeStorage;
 import com.mystipixel.royalwardrobe.util.Text;
 import com.mystipixel.royalwardrobe.wardrobe.ArmorSet;
+import com.mystipixel.royalwardrobe.wardrobe.WardrobeActions;
 import com.mystipixel.royalwardrobe.wardrobe.WardrobeData;
 import org.bukkit.Sound;
 import org.bukkit.configuration.file.FileConfiguration;
@@ -582,69 +584,59 @@ public final class WardrobeMenu {
     // ── actions ────────────────────────────────────────────────────────────────────
 
     private void equip(Player player, WardrobeHolder holder, int target) {
-        WardrobeData data = holder.data();
-        ArmorSet worn = wornSet(player);
-        int active = data.activeIndex();
-
-        if (active != -1) {
-            data.setSet(active, worn);           // the set you were wearing goes back to its column
-            data.setActiveIndex(-1);
-            persist(holder, active);
-        } else if (!worn.isEmpty()) {
-            if (!moveToInventory(player, worn)) { // loose armor -> inventory
-                playSound(player, "fail");
-                message(player, "inventory-full");
-                return;
-            }
-        }
-
-        setWorn(player, data.set(target).pieces());
-        data.setSet(target, ArmorSet.empty());   // items are on the player now
-        data.setActiveIndex(target);
-        if (data.firstWorn(target) <= 0) {
-            data.setFirstWorn(target, now());
-        }
-        persist(holder, target);
-        render(player, holder);
-        playSound(player, "equip");
-        message(player, "equipped");
+        apply(player, holder, WardrobeActions.equip(holder.data(), body(player), target, now()));
     }
 
     private void storeCurrent(Player player, WardrobeHolder holder, int target) {
-        WardrobeData data = holder.data();
-        if (data.activeIndex() != -1) {
-            playSound(player, "fail");
-            message(player, "already-active");
-            return;
-        }
-        ArmorSet worn = wornSet(player);
-        if (worn.isEmpty()) {
-            playSound(player, "fail");
-            message(player, "no-armor");
-            return;
-        }
-        data.setActiveIndex(target);             // your worn armor becomes this (active) set
-        data.setFirstWorn(target, now());
-        data.setSet(target, ArmorSet.empty());
-        persist(holder, target);
-        render(player, holder);
-        playSound(player, "store");
-        message(player, "stored");
+        apply(player, holder, WardrobeActions.storeCurrent(holder.data(), body(player), target, now()));
     }
 
     private void unequip(Player player, WardrobeHolder holder) {
-        WardrobeData data = holder.data();
-        int active = data.activeIndex();
-        if (active == -1) {
-            return;
+        apply(player, holder, WardrobeActions.unequip(holder.data(), body(player)));
+    }
+
+    /** Persist, redraw and tell the player how a move went. */
+    private void apply(Player player, WardrobeHolder holder, WardrobeActions.Result result) {
+        String sound;
+        String key;
+        switch (result.outcome()) {
+            case EQUIPPED -> { sound = "equip"; key = "equipped"; }
+            case STORED -> { sound = "store"; key = "stored"; }
+            case UNEQUIPPED -> { sound = "unequip"; key = "unequipped"; }
+            case INVENTORY_FULL -> { sound = "fail"; key = "inventory-full"; }
+            case NO_ARMOR -> { sound = "fail"; key = "no-armor"; }
+            case ALREADY_ACTIVE -> { sound = "fail"; key = "already-active"; }
+            default -> { return; }
         }
-        data.setSet(active, wornSet(player));    // worn armor goes back into its column
-        data.setActiveIndex(-1);
-        setWorn(player, new ItemStack[ArmorSet.SIZE]);
-        persist(holder, active);
-        render(player, holder);
-        playSound(player, "unequip");
-        message(player, "unequipped");
+        if (result.outcome().succeeded()) {
+            // Storing only relabels armor that stays on the player; equip and unequip move gear
+            // between the player and the table, so the player file is saved right behind the write.
+            boolean movedGear = result.outcome() != WardrobeActions.Outcome.STORED;
+            persist(holder, movedGear, result.changed());
+            render(player, holder);
+        }
+        playSound(player, sound);
+        message(player, key);
+    }
+
+    /** The player's armor and inventory, for {@link WardrobeActions}. */
+    private WardrobeActions.Body body(Player player) {
+        return new WardrobeActions.Body() {
+            @Override
+            public ArmorSet worn() {
+                return wornSet(player);
+            }
+
+            @Override
+            public void wear(ItemStack[] pieces) {
+                setWorn(player, pieces);
+            }
+
+            @Override
+            public boolean stowWorn() {
+                return moveToInventory(player, wornSet(player));
+            }
+        };
     }
 
     // ── command-driven access (no GUI) ─────────────────────────────────────────────
@@ -763,30 +755,44 @@ public final class WardrobeMenu {
     }
 
     /**
-     * Persist one slot. Snapshots on the main thread (the live array keeps being mutated by clicks)
-     * and queues the write on storage's single writer thread, so writes for the same slot can't
-     * commit out of order and a shutdown drains them instead of dropping them.
+     * Persist slots as one transaction. Snapshots on the main thread (the live array keeps being
+     * mutated by clicks) and queues the write on storage's single writer thread, so writes can't commit
+     * out of order and a shutdown drains them instead of dropping them.
+     *
+     * <p>An equip changes two slots, the set taken off and the set put on, and committing them
+     * separately left a window where only one was stored. With {@code savePlayer}, the owner's player
+     * file is saved as soon as the write commits. The table and the player file still can't commit
+     * atomically together, but this shrinks the gap a crash can fall into from the next autosave,
+     * minutes away, to a single tick.
      */
-    private void persist(WardrobeHolder holder, int index) {
+    private void persist(WardrobeHolder holder, boolean savePlayer, int... indexes) {
         WardrobeData data = holder.data();
         UUID owner = holder.owner();
         String scope = holder.scope();
-        ArmorSet snapshot = data.set(index).snapshot();
-        long firstWorn = data.firstWorn(index);
-        boolean active = data.activeIndex() == index;
-        String name = data.name(index);
-        java.util.UUID viewer = holder.owner();
+        List<WardrobeStorage.SlotWrite> writes = new ArrayList<>(indexes.length);
+        for (int index : indexes) {
+            writes.add(new WardrobeStorage.SlotWrite(index, data.set(index).snapshot(), data.firstWorn(index),
+                    data.activeIndex() == index, data.name(index)));
+        }
         plugin.storage().submit(() -> {
-            if (!plugin.storage().save(owner, scope, index, snapshot, firstWorn, active, name)) {
-                // Never fail silently — the gear is unaccounted for and the player must know.
-                plugin.getServer().getScheduler().runTask(plugin, () -> {
-                    Player online = plugin.getServer().getPlayer(viewer);
-                    if (online != null) {
-                        message(online, "save-failed");
-                    }
-                });
-            }
+            boolean saved = plugin.storage().saveAll(owner, scope, writes);
+            plugin.getServer().getScheduler().runTask(plugin, () -> {
+                Player online = plugin.getServer().getPlayer(owner);
+                if (online == null) {
+                    return;
+                }
+                if (!saved) {
+                    // Never fail silently — the gear is unaccounted for and the player must know.
+                    message(online, "save-failed");
+                } else if (savePlayer) {
+                    online.saveData();
+                }
+            });
         });
+    }
+
+    private void persist(WardrobeHolder holder, int index) {
+        persist(holder, false, index);
     }
 
     private ItemStack item(String itemPath, String def, String lorePath, Map<String, String> ph) {
