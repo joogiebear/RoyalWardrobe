@@ -39,7 +39,9 @@ public final class WardrobeCommand implements CommandExecutor, TabCompleter {
             plugin.reloadConfig();
             plugin.messages().reload();
             plugin.menu().reload();
-            sender.sendMessage(Text.of("&aRoyalWardrobe config, messages + menu reloaded."));
+            plugin.reloadScopes();
+            sender.sendMessage(Text.of("&aRoyalWardrobe config, messages, menu and scope reloaded."
+                    + " &7Storage settings apply on restart."));
             return true;
         }
         if (!(sender instanceof Player player)) {

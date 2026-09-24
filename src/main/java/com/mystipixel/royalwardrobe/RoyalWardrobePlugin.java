@@ -39,7 +39,7 @@ public final class RoyalWardrobePlugin extends JavaPlugin {
             getServer().getPluginManager().disablePlugin(this);
             return;
         }
-        this.scopes = new ScopeResolver(getConfig().getString("wardrobe.scope-placeholder", "%royalskyblock_profile_id%"));
+        reloadScopes();
         this.messages = new MessageManager(this);
         this.sessions = new WardrobeSessions(this);
         getServer().getPluginManager().registerEvents(sessions, this);
@@ -76,6 +76,11 @@ public final class RoyalWardrobePlugin extends JavaPlugin {
 
     public WardrobeStorage storage() {
         return storage;
+    }
+
+    /** Re-read wardrobe.scope-placeholder. Open wardrobes must be closed first: their scope may change. */
+    public void reloadScopes() {
+        this.scopes = new ScopeResolver(getConfig().getString("wardrobe.scope-placeholder", "%royalskyblock_profile_id%"));
     }
 
     public ScopeResolver scopes() {
