@@ -1,3 +1,28 @@
+## 2026.39.1 — 2026-09-24
+
+### 🐛 Fixes
+- strip set-name codes until none are left (`8e816f5`)
+- reload the scope placeholder with /wardrobe reload (`ca9f2b2`)
+- settle wardrobe clicks at the highest listener priority (`389859e`)
+- store wardrobe set names as plain text (`402fba2`)
+- log wardrobe menu config warnings once per reload (`9fc87fe`)
+- report the wardrobe scope mode to bStats (`1a3852a`)
+- keep the rename sign off block entities and blocks already in use (`56112f8`)
+- accept wardrobe pieces by equippable slot, one at a time (`4aff790`)
+- commit each wardrobe swap in one transaction (`a0ac482`)
+- refuse per-profile wardrobes when no profile resolves (`41a5868`)
+- close wardrobes on reload and keep sets past a shrunk menu visible (`5adba0f`)
+- keep one live wardrobe per player so menus can't go stale (`29a3159`)
+- refuse to open a wardrobe that failed to load (`9e2dfc7`)
+- stop re-setting the cursor a tick after a wardrobe click (`2eaf32e`)
+
+### ♻️ Refactors
+- look wardrobe sounds up in the sound registry (`d59cc8e`)
+
+### 📝 Documentation
+- cover damaged slots, set names, profile scoping and commands (`0631231`)
+- add MIT license (`92c4f8e`)
+
 ## 2026.39.0 — 2026-09-23
 
 ### 🔧 Other
