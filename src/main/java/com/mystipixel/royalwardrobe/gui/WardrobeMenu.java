@@ -52,6 +52,11 @@ public final class WardrobeMenu {
     private FileConfiguration gui;
     private int columns;
     private int pages;
+    // Parsed once per reload, so a misplaced entry is reported once rather than on every click.
+    private List<Button> buttons = List.of();
+    private int previousSlot;
+    private int nextSlot;
+    private int closeSlot;
 
     public WardrobeMenu(RoyalWardrobePlugin plugin, SignInput signInput) {
         this.plugin = plugin;
@@ -67,6 +72,11 @@ public final class WardrobeMenu {
         this.gui = YamlConfiguration.loadConfiguration(file);
         this.columns = Math.max(1, Math.min(9, gui.getInt("columns-per-page", 9)));
         this.pages = Math.max(1, gui.getInt("pages", 2));
+        int base = NAV_ROW * 9;
+        this.previousSlot = navSlot("previous", base);
+        this.nextSlot = navSlot("next", base + 8);
+        this.closeSlot = navSlot("close", base + 4);
+        this.buttons = parseButtons();
     }
 
     public int capacity() {
@@ -168,7 +178,7 @@ public final class WardrobeMenu {
      * Extra buttons declared in {@code buttons:}. The armour grid is computed rather than authored, so
      * this is how a menu gains anything beyond the built-in navigation without touching code.
      */
-    private List<Button> buttons() {
+    private List<Button> parseButtons() {
         List<Button> out = new ArrayList<>();
         List<Map<?, ?>> raw = gui.getMapList("buttons");
         for (int i = 0; i < raw.size(); i++) {
@@ -332,15 +342,14 @@ public final class WardrobeMenu {
                     : dyeFor(set, active, setIndex, data));
         }
 
-        int base = NAV_ROW * 9;
         if (page > 0) {
-            inv.setItem(navSlot("previous", base), item("nav.previous.item", "arrow name:\"&ePrevious Page\"", "nav.previous.lore", Map.of()));
+            inv.setItem(previousSlot, item("nav.previous.item", "arrow name:\"&ePrevious Page\"", "nav.previous.lore", Map.of()));
         }
         if (page < pagesFor(data) - 1) {
-            inv.setItem(navSlot("next", base + 8), item("nav.next.item", "arrow name:\"&eNext Page\"", "nav.next.lore", Map.of()));
+            inv.setItem(nextSlot, item("nav.next.item", "arrow name:\"&eNext Page\"", "nav.next.lore", Map.of()));
         }
-        inv.setItem(navSlot("close", base + 4), item("nav.close.item", "barrier name:\"&cClose\"", "nav.close.lore", Map.of()));
-        for (Button button : buttons()) {
+        inv.setItem(closeSlot, item("nav.close.item", "barrier name:\"&cClose\"", "nav.close.lore", Map.of()));
+        for (Button button : buttons) {
             inv.setItem(button.index(), ItemSpec.parse(button.spec()).build(Map.of(), button.lore()));
         }
         player.updateInventory();
@@ -412,24 +421,23 @@ public final class WardrobeMenu {
         }
         // Admin-defined buttons are checked first so one can sit on the nav row without being
         // swallowed by the built-in paging behaviour.
-        for (Button button : buttons()) {
+        for (Button button : buttons) {
             if (button.index() == slot) {
                 runEffects(player, button.effects());
                 return;
             }
         }
         if (row == NAV_ROW) {
-            int base = NAV_ROW * 9;
-            if (slot == navSlot("previous", base) && holder.page() > 0) {
+            if (slot == previousSlot && holder.page() > 0) {
                 // A configured left-click replaces the built-in behaviour; without one, page as before.
                 if (!runEffects(player, clickEffects("nav.previous"))) {
                     openPage(player, holder, holder.page() - 1);
                 }
-            } else if (slot == navSlot("next", base + 8) && holder.page() < pagesFor(data) - 1) {
+            } else if (slot == nextSlot && holder.page() < pagesFor(data) - 1) {
                 if (!runEffects(player, clickEffects("nav.next"))) {
                     openPage(player, holder, holder.page() + 1);
                 }
-            } else if (slot == navSlot("close", base + 4)) {
+            } else if (slot == closeSlot) {
                 if (!runEffects(player, clickEffects("nav.close"))) {
                     player.closeInventory();
                 }
