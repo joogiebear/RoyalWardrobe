@@ -48,6 +48,10 @@ wardrobe:
   # How a player's wardrobe is scoped. If this placeholder resolves (RoyalSkyblock +
   # PlaceholderAPI installed) each profile gets its own wardrobe; otherwise it's one
   # wardrobe per player. Blank it to force per-player everywhere.
+  #
+  # In per-profile mode, a player with no active profile can't open their wardrobe. It
+  # does not fall back to a per-player one: that would be shared by every profile, a
+  # way to move gear into or out of an Ironman profile.
   scope-placeholder: "%royalskyblock_profile_id%"
 
 # Chat feedback lives in messages.yml; menu text (buttons, lore) lives in gui/wardrobe.yml.

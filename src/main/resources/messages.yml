@@ -18,6 +18,8 @@ no-armor: "&cYou aren't wearing any armor to store."
 already-active: "&cYou're already wearing a saved setup — unequip it first."
 slot-locked: "&cThat wardrobe slot is locked. Unlock more with a rank or perk."
 inventory-full: "&cMake room in your inventory first."
+# Per-profile wardrobes only: the player has no active profile right now.
+no-profile: "&cJoin or create a profile before using your wardrobe."
 slot-corrupt: "&cThat wardrobe slot is damaged and can't be used — tell an admin."
 
 # Shown when a wardrobe write fails. Worth keeping loud: it means the set on screen is not what is

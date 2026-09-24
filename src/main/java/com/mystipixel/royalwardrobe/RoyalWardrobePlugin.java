@@ -56,8 +56,10 @@ public final class RoyalWardrobePlugin extends JavaPlugin {
         }
 
         setupMetrics();
-        getLogger().info("RoyalWardrobe enabled — capacity " + capacity() + " sets, scope: "
-                + (scopes.perProfile() ? "per-profile (RoyalSkyblock)" : "per-player") + ".");
+        // Expansions register after plugins enable, so per-profile mode can't be decided yet — it is
+        // checked on each open instead.
+        getLogger().info("RoyalWardrobe enabled — capacity " + capacity() + " sets, per-profile when "
+                + getConfig().getString("wardrobe.scope-placeholder", "") + " is available.");
     }
 
     @Override

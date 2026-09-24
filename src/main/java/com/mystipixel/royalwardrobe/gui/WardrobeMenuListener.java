@@ -38,6 +38,14 @@ public final class WardrobeMenuListener implements Listener {
         Inventory clicked = event.getClickedInventory();
         ClickType click = event.getClick();
 
+        // The profile changed under an open menu: its sets belong to the old profile while the armor
+        // on the player now belongs to the new one, so no click may act on it.
+        if (!holder.scope().equals(plugin.scopes().scopeFor(player))) {
+            event.setCancelled(true);
+            player.closeInventory();
+            return;
+        }
+
         // A click in the wardrobe grid: fully controlled.
         if (clicked != null && clicked.getHolder() instanceof WardrobeHolder) {
             event.setCancelled(true);

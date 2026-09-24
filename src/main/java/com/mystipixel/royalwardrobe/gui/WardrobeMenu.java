@@ -128,6 +128,13 @@ public final class WardrobeMenu {
      */
     private void withSession(Player player, java.util.function.Consumer<WardrobeSessions.Session> action) {
         String scope = plugin.scopes().scopeFor(player);
+        if (scope == null) {
+            // Per-profile wardrobes, but no profile resolves (between profiles). Refuse rather than
+            // fall back to the shared wardrobe, which would carry gear from one profile to another.
+            playSound(player, "fail");
+            message(player, "no-profile");
+            return;
+        }
         plugin.sessions().with(player, scope, capacity(), action, () -> {
             playSound(player, "fail");
             message(player, "load-failed");
@@ -887,6 +894,7 @@ public final class WardrobeMenu {
             Map.entry("no-such-slot", "&cNo wardrobe slot with that number."),
             Map.entry("already-wearing", "&eYou're already wearing that setup."),
             Map.entry("setup-empty", "&cThat setup is empty."),
+            Map.entry("no-profile", "&cJoin or create a profile before using your wardrobe."),
             Map.entry("load-failed", "&cYour wardrobe couldn't be loaded right now. Try again shortly."),
             Map.entry("slot-corrupt", "&cThat wardrobe slot is damaged and can't be used — tell an admin."));
 
