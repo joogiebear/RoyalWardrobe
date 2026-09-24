@@ -7,6 +7,8 @@ import com.mystipixel.royalwardrobe.util.Text;
 import com.mystipixel.royalwardrobe.wardrobe.ArmorSet;
 import com.mystipixel.royalwardrobe.wardrobe.WardrobeActions;
 import com.mystipixel.royalwardrobe.wardrobe.WardrobeData;
+import io.papermc.paper.datacomponent.DataComponentTypes;
+import io.papermc.paper.datacomponent.item.Equippable;
 import org.bukkit.Sound;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
@@ -461,8 +463,23 @@ public final class WardrobeMenu {
                 playSound(player, "fail");
                 return;
             }
-            newCursor = currentEmpty ? null : current.clone();
-            set.pieces()[row] = cursor.clone();
+            // A set slot holds one piece. Some wearables stack (heads, pumpkins, custom items), so
+            // place one and keep the rest on the cursor; a stack can't be swapped for a stored piece.
+            if (cursor.getAmount() > 1) {
+                if (!currentEmpty) {
+                    playSound(player, "fail");
+                    return;
+                }
+                ItemStack one = cursor.clone();
+                one.setAmount(1);
+                ItemStack rest = cursor.clone();
+                rest.setAmount(cursor.getAmount() - 1);
+                set.pieces()[row] = one;
+                newCursor = rest;
+            } else {
+                newCursor = currentEmpty ? null : current.clone();
+                set.pieces()[row] = cursor.clone();
+            }
         }
         player.setItemOnCursor(newCursor);       // server-side now, so there's no dupe window
         persist(holder, setIndex);
@@ -514,13 +531,27 @@ public final class WardrobeMenu {
         return false;                            // no empty matching slot on this page
     }
 
+    /**
+     * The set row an item is worn in, or -1 if it can't be worn as armor. Read from the item's
+     * {@code equippable} component, which is what the game itself uses: it covers every armor piece,
+     * elytra, heads and carved pumpkins, and any custom item a server has made wearable — and turns
+     * away things that merely have an armor-like name.
+     */
     private static int armorRow(ItemStack item) {
-        for (int row = 0; row < ArmorSet.SIZE; row++) {
-            if (isArmorForRow(item, row)) {
-                return row;
-            }
+        if (item == null || item.isEmpty()) {
+            return -1;
         }
-        return -1;
+        Equippable equippable = item.getData(DataComponentTypes.EQUIPPABLE);
+        if (equippable == null) {
+            return -1;
+        }
+        return switch (equippable.slot()) {
+            case HEAD -> ArmorSet.HELMET;
+            case CHEST -> ArmorSet.CHEST;
+            case LEGS -> ArmorSet.LEGS;
+            case FEET -> ArmorSet.BOOTS;
+            default -> -1;                       // hands, a horse's body, a saddle
+        };
     }
 
     /**
@@ -743,15 +774,7 @@ public final class WardrobeMenu {
     }
 
     private static boolean isArmorForRow(ItemStack item, int row) {
-        String n = item.getType().name();
-        return switch (row) {
-            case ArmorSet.HELMET -> n.endsWith("_HELMET") || n.endsWith("_HEAD") || n.endsWith("_SKULL")
-                    || n.equals("CARVED_PUMPKIN");
-            case ArmorSet.CHEST -> n.endsWith("_CHESTPLATE") || n.equals("ELYTRA");
-            case ArmorSet.LEGS -> n.endsWith("_LEGGINGS");
-            case ArmorSet.BOOTS -> n.endsWith("_BOOTS");
-            default -> false;
-        };
+        return armorRow(item) == row;
     }
 
     /**
