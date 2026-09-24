@@ -106,7 +106,7 @@ public final class RoyalWardrobePlugin extends JavaPlugin {
                 () -> getConfig().getString("storage.type", "SQLITE").toUpperCase(Locale.ROOT)));
         metrics.addCustomChart(new SimplePie("wardrobe_capacity", () -> String.valueOf(capacity())));
         metrics.addCustomChart(new SimplePie("scope",
-                () -> getConfig().getString("wardrobe.scope", "global")));
+                () -> scopes.perProfile() ? "per-profile" : "per-player"));
     }
 
 }
