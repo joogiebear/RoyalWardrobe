@@ -257,7 +257,12 @@ public final class WardrobeMenu {
             switch (id) {
                 case "close", "close_inventory" -> player.closeInventory();
                 case "message" -> player.sendMessage(Text.of(arg(a, "message")));
-                case "player_command" -> player.performCommand(arg(a, "command"));
+                // Next tick: the command may open another plugin's menu, which is unreliable from
+                // inside the click event that is still processing this one.
+                case "player_command" -> {
+                    String command = arg(a, "command");
+                    plugin.getServer().getScheduler().runTask(plugin, () -> player.performCommand(command));
+                }
                 case "console_command" -> plugin.getServer().dispatchCommand(
                         plugin.getServer().getConsoleSender(),
                         arg(a, "command").replace("%player%", player.getName()));
