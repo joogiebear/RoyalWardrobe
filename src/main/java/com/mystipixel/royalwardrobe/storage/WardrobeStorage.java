@@ -86,8 +86,10 @@ public final class WardrobeStorage {
                 loadDriver("org.sqlite.JDBC");
                 hikari.setJdbcUrl("jdbc:sqlite:" + dbFile.getAbsolutePath());
                 hikari.setDriverClassName("org.sqlite.JDBC");
-                hikari.setMaximumPoolSize(1);
-                hikari.setConnectionInitSql("PRAGMA journal_mode=WAL; PRAGMA busy_timeout=5000;");
+                hikari.setMaximumPoolSize(SqliteSettings.POOL_SIZE);
+                // Driver properties, not connectionInitSql: sqlite-jdbc prepares only the first statement
+                // of a multi-statement init string, so busy_timeout was being dropped.
+                hikari.setDataSourceProperties(SqliteSettings.properties());
             }
 
             this.dataSource = new HikariDataSource(hikari);
