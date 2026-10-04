@@ -1,3 +1,9 @@
+## 2026.40.0 — 2026-10-03
+
+### 🐛 Fixes
+- apply busy_timeout as well as journal_mode (`01812c4`)
+- run player_command buttons on the next tick (`917a7cc`)
+
 ## 2026.39.2 — 2026-09-24
 
 ### 🐛 Fixes
