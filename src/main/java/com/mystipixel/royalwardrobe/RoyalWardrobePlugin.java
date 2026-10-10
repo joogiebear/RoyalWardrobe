@@ -68,6 +68,7 @@ public final class RoyalWardrobePlugin extends JavaPlugin {
         // the click listener is unregistered after this, so a menu left open would let its pieces be taken
         if (sessions != null) {
             sessions.invalidateAll();
+            sessions.flushFailedWrites();
         }
         if (signInput != null) {
             signInput.restoreAll();
