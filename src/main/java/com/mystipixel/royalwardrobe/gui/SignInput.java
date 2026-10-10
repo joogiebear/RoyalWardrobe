@@ -42,6 +42,7 @@ public final class SignInput implements Listener {
 
     private final JavaPlugin plugin;
     private final Map<Location, Pending> pending = new ConcurrentHashMap<>();
+    private final Map<Location, Pending> restoring = new ConcurrentHashMap<>();
 
     public SignInput(JavaPlugin plugin) {
         this.plugin = plugin;
@@ -118,14 +119,30 @@ public final class SignInput implements Listener {
         }
         event.setCancelled(true);
         String input = PlainTextComponentSerializer.plainText().serialize(event.line(0)).trim();
-        Block block = event.getBlock();
+        Location loc = event.getBlock().getLocation();
+        // tracked until the deferred restore runs, so restoreAll still covers it
+        restoring.put(loc, p);
         Bukkit.getScheduler().runTask(plugin, () -> {
-            block.setBlockData(p.original(), false);
+            if (restoring.remove(loc, p)) {
+                loc.getBlock().setBlockData(p.original(), false);
+            }
             Player player = Bukkit.getPlayer(p.player());
             if (player != null) {
                 p.callback().accept(input);
             }
         });
+    }
+
+    /** Shutdown: put back every borrowed block, answered or not. */
+    public void restoreAll() {
+        for (Map<Location, Pending> map : List.of(pending, restoring)) {
+            for (Map.Entry<Location, Pending> entry : List.copyOf(map.entrySet())) {
+                Block block = entry.getKey().getBlock();
+                if (map.remove(entry.getKey(), entry.getValue()) && block.getType() == Material.OAK_SIGN) {
+                    block.setBlockData(entry.getValue().original(), false);
+                }
+            }
+        }
     }
 
     /** Never leave a sign behind because someone logged out mid-prompt. */

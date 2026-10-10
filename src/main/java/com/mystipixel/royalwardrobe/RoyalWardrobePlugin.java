@@ -28,6 +28,7 @@ public final class RoyalWardrobePlugin extends JavaPlugin {
     private ScopeResolver scopes;
     private WardrobeMenu menu;
     private WardrobeSessions sessions;
+    private com.mystipixel.royalwardrobe.gui.SignInput signInput;
     private MessageManager messages;
 
     @Override
@@ -43,7 +44,7 @@ public final class RoyalWardrobePlugin extends JavaPlugin {
         this.messages = new MessageManager(this);
         this.sessions = new WardrobeSessions(this);
         getServer().getPluginManager().registerEvents(sessions, this);
-        com.mystipixel.royalwardrobe.gui.SignInput signInput = new com.mystipixel.royalwardrobe.gui.SignInput(this);
+        this.signInput = new com.mystipixel.royalwardrobe.gui.SignInput(this);
         getServer().getPluginManager().registerEvents(signInput, this);
         this.menu = new WardrobeMenu(this, signInput);
 
@@ -64,6 +65,13 @@ public final class RoyalWardrobePlugin extends JavaPlugin {
 
     @Override
     public void onDisable() {
+        // the click listener is unregistered after this, so a menu left open would let its pieces be taken
+        if (sessions != null) {
+            sessions.invalidateAll();
+        }
+        if (signInput != null) {
+            signInput.restoreAll();
+        }
         if (storage != null) {
             storage.shutdown();
         }
