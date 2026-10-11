@@ -1,3 +1,18 @@
+## 2026.41.0 - 2026-10-10
+
+### Fixes
+- retry failed wardrobe writes and lock the wardrobe until they save (`11f0882`)
+
+### Refactors
+- read all player-facing text from config (`5810000`)
+- replace the sign input with a native text dialog (`1024372`)
+
+### Documentation
+- add AGENTS.md with the suite's development standards (`da499e3`)
+
+### Other
+- Close open menus and restore prompt signs on disable (`e8ab7dc`)
+
 ## 2026.40.0 — 2026-10-03
 
 ### 🐛 Fixes
