@@ -14,11 +14,7 @@ import java.sql.Statement;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-/**
- * Reads both settings back off a real connection. The old multi-statement {@code connectionInitSql}
- * string looked right and applied only its first PRAGMA: journal mode became WAL and busy_timeout
- * silently kept the driver's 3000 ms. Nothing ever read them back, which is why it went unnoticed.
- */
+// reads both settings back off a real connection
 class SqliteSettingsTest {
 
     @TempDir
@@ -51,13 +47,8 @@ class SqliteSettingsTest {
         }
     }
 
-    /**
-     * Pins the driver behaviour this class exists to work around, using the exact string
-     * {@link WardrobeStorage} used to hand to {@code connectionInitSql} and the exact JDBC call
-     * HikariCP makes with it ({@code Statement#execute}, which prepares only the first statement —
-     * {@code executeUpdate} would have run them all). If a future sqlite-jdbc runs the whole string,
-     * this turns red and the choice can be revisited; until then it documents the bug.
-     */
+    // Pins the driver behaviour SqliteSettings works around: Statement#execute (what HikariCP uses for
+    // connectionInitSql) runs only the first statement. If this turns red, the workaround can be revisited.
     @Test
     @DisplayName("the old multi-statement init string stops after its first pragma")
     void multiStatementInitSqlStopsAfterTheFirstPragma() throws Exception {

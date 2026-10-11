@@ -7,9 +7,8 @@ import org.bukkit.inventory.InventoryHolder;
 import java.util.UUID;
 
 /**
- * Carries a wardrobe session's state on the open inventory itself: whose it is, the scope it was loaded
- * for, the live {@link WardrobeData}, and the page currently shown. Using an {@link InventoryHolder}
- * lets the listener identify a wardrobe inventory (and its page) with no title-string matching.
+ * A wardrobe session's state carried on the open inventory, so the listener can identify a wardrobe
+ * inventory and its page without matching titles.
  */
 public final class WardrobeHolder implements InventoryHolder {
 
@@ -29,8 +28,8 @@ public final class WardrobeHolder implements InventoryHolder {
     }
 
     /**
-     * How many slots this player may use, resolved from permissions when the menu opened. Slots at or
-     * past this index are locked — gear already in them stays retrievable, it just can't be added to.
+     * Slots this player may use, resolved from permissions when the menu opened. Gear in locked slots
+     * stays retrievable; it just can't be added to.
      */
     public int allowedSlots() {
         return allowedSlots;

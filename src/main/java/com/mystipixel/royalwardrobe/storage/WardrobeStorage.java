@@ -23,28 +23,22 @@ import java.util.concurrent.TimeUnit;
 import java.util.logging.Level;
 
 /**
- * Persistence for wardrobe sets over one HikariCP data source, dual-dialect (SQLite / MySQL) like the
- * rest of the suite. One row per set: {@code (owner, scope, idx) -> armor, first_worn, active}. The
- * <em>active</em> set's items live on the player, so its row stores empty armor with {@code active=1}
- * and only its {@code first_worn} date — which is what keeps everything dupe-safe.
+ * Wardrobe persistence over HikariCP (SQLite or MySQL). One row per set:
+ * {@code (owner, scope, idx) -> armor, first_worn, active}. The active set's items are on the player,
+ * so its row stores empty armor with {@code active=1}.
  */
 public final class WardrobeStorage {
 
     private enum Type { SQLITE, MYSQL }
 
-    /** Sanity bound on a stored index, so one bad row can't make a load allocate millions of slots. */
+    // bound on a stored index, so one bad row can't make a load allocate millions of slots
     private static final int MAX_SLOTS = 9 * 64;
 
     private final JavaPlugin plugin;
     private Type type;
     private HikariDataSource dataSource;
 
-    /**
-     * All writes go through ONE thread, so saves for the same slot can never commit out of order —
-     * two rapid clicks on the same column used to race on the pooled scheduler and the older state
-     * could land last. It is also the drain point: {@link #shutdown()} waits for queued writes before
-     * closing the pool, so a stop can't discard a save the player already saw succeed.
-     */
+    // one thread, so saves for the same slot commit in order; shutdown() drains it before closing the pool
     private ExecutorService writer;
 
     public WardrobeStorage(JavaPlugin plugin) {
@@ -87,8 +81,6 @@ public final class WardrobeStorage {
                 hikari.setJdbcUrl("jdbc:sqlite:" + dbFile.getAbsolutePath());
                 hikari.setDriverClassName("org.sqlite.JDBC");
                 hikari.setMaximumPoolSize(SqliteSettings.POOL_SIZE);
-                // Driver properties, not connectionInitSql: sqlite-jdbc prepares only the first statement
-                // of a multi-statement init string, so busy_timeout was being dropped.
                 hikari.setDataSourceProperties(SqliteSettings.properties());
             }
 
@@ -127,7 +119,7 @@ public final class WardrobeStorage {
                 + "PRIMARY KEY (owner, scope, idx))";
         try (Connection c = dataSource.getConnection(); Statement st = c.createStatement()) {
             st.executeUpdate(ddl);
-            // Migrate a pre-existing v1 table (armor only) by adding the columns if they're missing.
+            // v1 tables had only the armor column
             addColumnIfMissing(c, "wardrobe_sets", "first_worn", "BIGINT NOT NULL DEFAULT 0");
             addColumnIfMissing(c, "wardrobe_sets", "active", "INT NOT NULL DEFAULT 0");
             addColumnIfMissing(c, "wardrobe_sets", "set_name", "VARCHAR(48)");
@@ -139,7 +131,7 @@ public final class WardrobeStorage {
             DatabaseMetaData meta = c.getMetaData();
             try (ResultSet rs = meta.getColumns(c.getCatalog(), null, table, column)) {
                 if (rs.next()) {
-                    return; // already present
+                    return;
                 }
             }
             try (Statement st = c.createStatement()) {
@@ -155,15 +147,10 @@ public final class WardrobeStorage {
     }
 
     /**
-     * Load a player's wardrobe, or {@code null} if it could not be read.
-     *
-     * <p>A failed read must never come back as an empty wardrobe: the player would see free slots,
-     * store into one, and the upsert would overwrite the real set that is still in the table. A single
-     * row that fails to decode is flagged corrupt instead, so the rest of the wardrobe stays usable.
-     *
-     * <p>The result holds at least {@code capacity} slots, and more if sets are stored past it — the
-     * menu having been shrunk since. Those extra slots are shown locked, so their gear can still be
-     * taken out instead of silently vanishing from view.
+     * Load a player's wardrobe, or {@code null} if it could not be read. Never return an empty wardrobe
+     * on failure: storing into a "free" slot would overwrite the real set. A row that fails to decode is
+     * flagged corrupt instead. The result can exceed {@code capacity} if the menu shrank; those slots
+     * show locked so their gear can still be taken out.
      */
     public WardrobeData load(UUID owner, String scope, int capacity) {
         java.util.List<Row> rows = new java.util.ArrayList<>();
@@ -210,7 +197,7 @@ public final class WardrobeStorage {
             } catch (RuntimeException badRow) {
                 corrupt[idx] = true;
                 plugin.getLogger().log(Level.SEVERE, "Wardrobe slot " + idx + " for " + owner + "/" + scope
-                        + " could not be decoded — it is locked and left untouched in the database.", badRow);
+                        + " could not be decoded; it is locked and left untouched in the database.", badRow);
             }
         }
         return new WardrobeData(sets, firstWorn, names, corrupt, activeIndex);
@@ -236,11 +223,8 @@ public final class WardrobeStorage {
     }
 
     /**
-     * Write several slots in one transaction: all of them commit or none do. An equip moves gear
-     * out of one slot and into another, and committing those separately let a crash in between leave
-     * only half the move stored.
-     * Returns whether it actually committed — callers must not treat a failed write as success,
-     * because wardrobe gear only exists in one place at a time.
+     * Write several slots in one transaction, so an equip's two slots commit together or not at all.
+     * Returns whether it committed; callers must not treat a failed write as success.
      */
     public boolean saveAll(UUID owner, String scope, java.util.List<SlotWrite> writes) {
         try (Connection c = dataSource.getConnection()) {
@@ -265,10 +249,7 @@ public final class WardrobeStorage {
         }
     }
 
-    /**
-     * Upsert one slot. An empty, never-worn, inactive, unnamed slot is deleted instead — a name is
-     * data the player typed, so a named-but-empty slot keeps its row.
-     */
+    // an empty, never-worn, inactive, unnamed slot is deleted; a named empty slot keeps its row
     private void write(Connection c, UUID owner, String scope, SlotWrite w) throws SQLException {
         boolean empty = w.set() == null || w.set().isEmpty();
         if (!w.active() && empty && w.firstWorn() <= 0 && (w.name() == null || w.name().isBlank())) {
@@ -307,7 +288,7 @@ public final class WardrobeStorage {
             writer.shutdown();
             try {
                 if (!writer.awaitTermination(10, TimeUnit.SECONDS)) {
-                    plugin.getLogger().warning("Wardrobe writes still pending after 10s — forcing shutdown.");
+                    plugin.getLogger().warning("Wardrobe writes still pending after 10s, forcing shutdown.");
                     writer.shutdownNow();
                 }
             } catch (InterruptedException e) {

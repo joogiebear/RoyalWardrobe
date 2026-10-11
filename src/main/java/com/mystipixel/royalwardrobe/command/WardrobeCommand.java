@@ -33,8 +33,7 @@ public final class WardrobeCommand implements CommandExecutor, TabCompleter {
                 sender.sendMessage(Text.of("&cYou don't have permission to do that."));
                 return true;
             }
-            // Close open wardrobes first: the menu's shape may change, and a menu laid out for the old
-            // one would index slots that no longer exist.
+            // close open wardrobes first: a menu laid out for the old shape would index slots that no longer exist
             plugin.sessions().invalidateAll();
             plugin.reloadConfig();
             plugin.messages().reload();

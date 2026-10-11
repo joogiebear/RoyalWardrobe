@@ -24,15 +24,12 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
-/**
- * The wardrobe's promise is that every piece is always in exactly one place: worn, stored or in the
- * inventory. These drive the moves against a fake player and count where each piece ended up.
- */
+// every piece must always be in exactly one place: worn, stored or in the inventory
 class WardrobeActionsTest {
 
     private static final long NOW = 1_700_000_000_000L;
 
-    /** A player's armor slots and inventory, with a fixed number of free inventory slots. */
+    // fixed number of free inventory slots
     private static final class FakeBody implements WardrobeActions.Body {
         ItemStack[] worn = new ItemStack[ArmorSet.SIZE];
         final List<ItemStack> inventory = new ArrayList<>();
@@ -84,7 +81,7 @@ class WardrobeActionsTest {
         return new WardrobeData(sets, new long[capacity], new String[capacity], new boolean[capacity], -1);
     }
 
-    /** How many times each piece appears across the body, the inventory and every stored set. */
+    // how many times each piece appears across the body, the inventory and every stored set
     private static Map<ItemStack, Integer> places(WardrobeData data, FakeBody body) {
         Map<ItemStack, Integer> seen = new IdentityHashMap<>();
         List<ItemStack> all = new ArrayList<>(Arrays.asList(body.worn));

@@ -15,14 +15,13 @@ import java.util.Map;
 import java.util.UUID;
 
 /**
- * Parses the EcoMenus inline item syntax used across the Royal suite, e.g.
+ * Parses the EcoMenus inline item syntax, e.g.
  * <pre>barrier hide_attributes name:"&cClose"</pre>
  * The first token is a vanilla {@link Material}; the rest are flags ({@code hide_enchants},
- * {@code hide_attributes}) and {@code key:"value"} modifiers. Player heads follow the eco convention:
+ * {@code hide_attributes}) and {@code key:"value"} modifiers. Player heads:
  * <pre>player_head texture:&lt;base64&gt;
  * player_head head:&lt;player&gt;</pre>
- * Names/lore may contain {@code %placeholders%}, filled at render time by {@link #build}. (Unlike the
- * bank's copy this has no eco item resolution — the wardrobe's set icons are real armor items.)
+ * Names and lore may contain {@code %placeholders%}, filled by {@link #build}. No eco item resolution.
  */
 public final class ItemSpec {
 

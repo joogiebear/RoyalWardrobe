@@ -1,19 +1,9 @@
-# ═══════════════════════════════════════════════════════════════════════════════
-#  RoyalWardrobe  ·  Main Configuration
-# ═══════════════════════════════════════════════════════════════════════════════
-#  Store armor sets and swap between them from a GUI (Hypixel-style). Gear is MOVED,
-#  never copied, so stat items can never be duplicated.
-#
-#  The wardrobe MENU — layout, slots, icons, sounds — lives in gui/wardrobe.yml, in the
-#  same EcoMenus dialect as the rest of the Royal suite. Reload both with /wardrobe reload.
-# ═══════════════════════════════════════════════════════════════════════════════
+# RoyalWardrobe main configuration.
+# The menu layout, icons and sounds are in gui/wardrobe.yml. Reload both with /wardrobe reload.
 
-# ── Storage ────────────────────────────────────────────────────────────────────
-# SQLITE (zero-setup, single server) or MYSQL (recommended for a network). Same dual-dialect
-# layer as the rest of the suite; the driver + pool load at runtime via Paper's library loader.
 storage:
-  # SQLITE works out of the box with no setup. Switch to MYSQL (and fill in the block below)
-  # if you run a network, or want the wardrobe in the same database as the rest of the suite.
+  # SQLITE (no setup, single server) or MYSQL (fill in the block below; use it for a network).
+  # Storage settings apply on restart.
   type: SQLITE
   sqlite-file: "wardrobe.db"
   mysql:
@@ -25,33 +15,21 @@ storage:
     properties: "useSSL=false&characterEncoding=utf8&allowPublicKeyRetrieval=true"
     pool-size: 10
 
-# ── Slots ──────────────────────────────────────────────────────────────────────
 # How many wardrobe slots a player may use. Slots past their allowance show as locked.
-#
-# Grant more with permissions — the HIGHEST number a player holds wins:
+# Grant more with permissions; the highest number a player holds wins:
 #   royalwardrobe.slots.3     -> 3 slots
 #   royalwardrobe.slots.*     -> the maximum below
-# Any permission plugin (LuckPerms, a rank, a purchased perk) can hand these out, so
-# other plugins can grant extra slots without RoyalWardrobe knowing about them.
-#
-# Shrinking someone's allowance never strands gear: a locked slot that still holds a
-# set keeps showing it and they can take those pieces back out — they just can't
-# store, equip, or add to a locked slot.
+# Gear in a locked slot can still be taken out, but nothing can be stored or equipped there.
 slots:
   default: 1
   permission: royalwardrobe.slots
   # Hard ceiling. Also bounded by the number of set slots in gui/wardrobe.yml.
   max: 18
 
-# ── Scoping ────────────────────────────────────────────────────────────────────
 wardrobe:
-  # How a player's wardrobe is scoped. If this placeholder resolves (RoyalSkyblock +
-  # PlaceholderAPI installed) each profile gets its own wardrobe; otherwise it's one
-  # wardrobe per player. Blank it to force per-player everywhere.
-  #
-  # In per-profile mode, a player with no active profile can't open their wardrobe. It
-  # does not fall back to a per-player one: that would be shared by every profile, a
-  # way to move gear into or out of an Ironman profile.
+  # If this placeholder resolves (RoyalSkyblock + PlaceholderAPI), each profile gets its own
+  # wardrobe; otherwise it's one per player. Blank it to force per-player.
+  # In per-profile mode a player with no active profile can't open the wardrobe.
   scope-placeholder: "%royalskyblock_profile_id%"
 
 # Chat feedback lives in messages.yml; menu text (buttons, lore) lives in gui/wardrobe.yml.
