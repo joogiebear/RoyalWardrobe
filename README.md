@@ -105,13 +105,15 @@ Switching storage backend does **not** migrate existing wardrobes.
 
 ### `messages.yml`
 
-All player-facing chat. Every key is optional — delete a line to use its built-in wording, or set it
-to `""` to silence that message. Keep `save-failed` audible: it means what's on screen isn't what's
+All player-facing chat, including `/wardrobe` command output and the `/wardrobe list` lines. Every key
+is optional — delete a line to use the wording shipped in the plugin jar, or set it to `""` to silence
+that message. Keep `save-failed` audible: it means what's on screen isn't what's
 stored, and continuing to move gear can lose it.
 
 ### `gui/wardrobe.yml`
 
-Item, name and lore for each menu element, the sounds block, and the bottom navigation.
+Item, name and lore for each menu element, the sounds block, and the bottom navigation. A key missing
+from your copy uses the one shipped in the plugin jar; set a `lore:` to `[]` to show no lore.
 
 Navigation buttons are placed by `row`/`column` (both 1-indexed), and a raw `slot:` index still works.
 Each may carry a `left-click:` list that **replaces** its built-in behaviour, and the `buttons:` list

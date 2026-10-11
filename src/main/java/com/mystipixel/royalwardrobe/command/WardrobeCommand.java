@@ -1,7 +1,6 @@
 package com.mystipixel.royalwardrobe.command;
 
 import com.mystipixel.royalwardrobe.RoyalWardrobePlugin;
-import com.mystipixel.royalwardrobe.util.Text;
 import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
@@ -11,6 +10,7 @@ import org.bukkit.entity.Player;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 /**
  * {@code /wardrobe} opens the wardrobe; {@code /wardrobe equip <n>} swaps to a set without the GUI
@@ -30,7 +30,7 @@ public final class WardrobeCommand implements CommandExecutor, TabCompleter {
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         if (args.length >= 1 && args[0].equalsIgnoreCase("reload")) {
             if (!sender.hasPermission("royalwardrobe.admin")) {
-                sender.sendMessage(Text.of("&cYou don't have permission to do that."));
+                plugin.messages().sendPlain(sender, "command.reload-no-permission", Map.of());
                 return true;
             }
             // close open wardrobes first: a menu laid out for the old shape would index slots that no longer exist
@@ -39,16 +39,15 @@ public final class WardrobeCommand implements CommandExecutor, TabCompleter {
             plugin.messages().reload();
             plugin.menu().reload();
             plugin.reloadScopes();
-            sender.sendMessage(Text.of("&aRoyalWardrobe config, messages, menu and scope reloaded."
-                    + " &7Storage settings apply on restart."));
+            plugin.messages().sendPlain(sender, "command.reloaded", Map.of());
             return true;
         }
         if (!(sender instanceof Player player)) {
-            sender.sendMessage(Text.of("&cOnly players can open the wardrobe."));
+            plugin.messages().sendPlain(sender, "command.players-only", Map.of());
             return true;
         }
         if (!player.hasPermission("royalwardrobe.use")) {
-            player.sendMessage(Text.of("&cYou don't have permission to use the wardrobe."));
+            plugin.messages().sendPlain(player, "command.no-permission", Map.of());
             return true;
         }
         if (args.length >= 1 && args[0].equalsIgnoreCase("list")) {
@@ -60,8 +59,7 @@ public final class WardrobeCommand implements CommandExecutor, TabCompleter {
             try {
                 number = Integer.parseInt(args[1]);
             } catch (NumberFormatException notANumber) {
-                player.sendMessage(Text.of("&cUsage: /" + label + " equip <number> &7— see /"
-                        + label + " list"));
+                plugin.messages().sendPlain(player, "command.usage-equip", Map.of("label", label));
                 return true;
             }
             plugin.menu().equipDirect(player, number - 1);
