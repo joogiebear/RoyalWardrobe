@@ -1,5 +1,6 @@
 package com.mystipixel.royalwardrobe.message;
 
+import com.mystipixel.royalwardrobe.util.BundledYaml;
 import com.mystipixel.royalwardrobe.util.Text;
 import org.bukkit.command.CommandSender;
 import org.bukkit.configuration.ConfigurationSection;
@@ -12,12 +13,16 @@ import java.io.IOException;
 import java.util.List;
 import java.util.Map;
 import java.util.logging.Level;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
- * Loads player-facing text from {@code messages.yml}. Every key has an inline fallback, so the file is
- * optional and a missing key is never an empty message. Reloadable via {@code /wardrobe reload}.
+ * Player-facing text from {@code messages.yml}. The jar's copy backs every missing key, so an older
+ * server file still shows the shipped wording. Reloadable via {@code /wardrobe reload}.
  */
 public final class MessageManager {
+
+    private static final Pattern PLACEHOLDER = Pattern.compile("\\{([a-z_]+)}");
 
     private final JavaPlugin plugin;
     private FileConfiguration messages;
@@ -33,7 +38,7 @@ public final class MessageManager {
     }
 
     public void reload() {
-        this.messages = YamlConfiguration.loadConfiguration(new File(plugin.getDataFolder(), "messages.yml"));
+        this.messages = BundledYaml.load(plugin, "messages.yml");
     }
 
     // copies a reworded legacy 'messages:' section from config.yml into a fresh messages.yml so it isn't reverted
@@ -63,39 +68,48 @@ public final class MessageManager {
         }
     }
 
-    public String prefix() {
-        return messages.getString("prefix", "");
+    /** The raw text for {@code key}, or "" when neither the server file nor the jar has it. */
+    public String get(String key) {
+        String raw = messages.getString(key);
+        return raw == null ? "" : raw;
     }
 
-    /** The raw message for {@code key}, or {@code fallback} when it isn't in the file. */
-    public String get(String key, String fallback) {
-        return messages.getString(key, fallback);
+    /** {@link #get} with {@code {name}} placeholders filled in one pass, so a value is never expanded again. */
+    public String format(String key, Map<String, String> placeholders) {
+        return fill(get(key), placeholders);
     }
 
-    /** The lines under {@code key}, or {@code fallback} when it isn't in the file. */
-    public List<String> lines(String key, List<String> fallback) {
-        List<String> value = messages.getStringList(key);
-        return value.isEmpty() ? fallback : value;
+    public List<String> lines(String key) {
+        return messages.getStringList(key);
     }
 
-    /** Send a prefixed message. Blank text is skipped, so a message can be silenced by emptying it. */
-    public void send(CommandSender target, String key, String fallback) {
-        String raw = get(key, fallback);
-        if (raw == null || raw.isBlank()) {
-            return;
+    /** Send with the prefix. Blank text is skipped, so a message can be silenced by emptying it. */
+    public void send(CommandSender target, String key) {
+        String raw = get(key);
+        if (!raw.isBlank()) {
+            target.sendMessage(Text.of(get("prefix") + raw));
         }
-        target.sendMessage(Text.of(prefix() + raw));
     }
 
-    /** As {@link #send}, with {placeholder} substitution. */
-    public void send(CommandSender target, String key, String fallback, Map<String, String> placeholders) {
-        String raw = get(key, fallback);
-        if (raw == null || raw.isBlank()) {
-            return;
+    /** Send without the prefix (command output and lists), with {@code {name}} placeholders. */
+    public void sendPlain(CommandSender target, String key, Map<String, String> placeholders) {
+        String raw = format(key, placeholders);
+        if (!raw.isBlank()) {
+            target.sendMessage(Text.of(raw));
         }
-        for (Map.Entry<String, String> entry : placeholders.entrySet()) {
-            raw = raw.replace("{" + entry.getKey() + "}", entry.getValue());
+    }
+
+    static String fill(String raw, Map<String, String> placeholders) {
+        if (placeholders.isEmpty()) {
+            return raw;
         }
-        target.sendMessage(Text.of(prefix() + raw));
+        Matcher m = PLACEHOLDER.matcher(raw);
+        StringBuilder out = new StringBuilder();
+        while (m.find()) {
+            String value = placeholders.get(m.group(1));
+            m.appendReplacement(out, Matcher.quoteReplacement(value != null ? value : m.group()));
+        }
+        m.appendTail(out);
+        return out.toString();
     }
 }

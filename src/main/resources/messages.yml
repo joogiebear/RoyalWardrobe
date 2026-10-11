@@ -1,7 +1,7 @@
 # RoyalWardrobe - player-facing text.
 #
-# Every message is optional: delete a line and its built-in wording is used instead. Empty a message
-# ("") to silence it. Colour codes use '&'.
+# Every message is optional: delete a line and the wording shipped with the plugin is used instead.
+# Empty a message ("") to silence it. Colour codes use '&'.
 
 prefix: "&6Wardrobe &8» &r"
 
@@ -16,6 +16,14 @@ inventory-full: "&cMake room in your inventory first."
 # Per-profile wardrobes only: the player has no active profile right now.
 no-profile: "&cJoin or create a profile before using your wardrobe."
 slot-corrupt: "&cThat wardrobe slot is damaged and can't be used — tell an admin."
+
+renamed: "&aSetup renamed."
+nothing-to-rename: "&cStore a setup there first, then name it."
+
+# /wardrobe equip <number> refusals.
+no-such-slot: "&cNo wardrobe slot with that number."
+already-wearing: "&eYou're already wearing that setup."
+setup-empty: "&cThat setup is empty."
 
 # Shown when a wardrobe write fails: the set on screen is not what is stored.
 save-failed: "&cYour wardrobe could not be saved — tell an admin before changing more sets."
@@ -33,3 +41,25 @@ input:
   rename:
     - "&fName this setup"
     - "&7Leave it blank to cancel."
+
+# /wardrobe command output. These are sent without the prefix.
+# {label} is the command as typed (wardrobe, or an alias).
+command:
+  no-permission: "&cYou don't have permission to use the wardrobe."
+  reload-no-permission: "&cYou don't have permission to do that."
+  reloaded: "&aRoyalWardrobe config, messages, menu and scope reloaded. &7Storage settings apply on restart."
+  players-only: "&cOnly players can open the wardrobe."
+  usage-equip: "&cUsage: /{label} equip <number> &7— see /{label} list"
+
+# /wardrobe list, sent without the prefix. One line per set:
+#   {number} the slot number, {name} the set's name, {state} one of the states below.
+list:
+  header: "&6&lWardrobe &7— /wardrobe equip <number>"
+  line: "&e{number}. &f{name} {state}"
+  state:
+    wearing: "&a(wearing)"
+    damaged: "&4(damaged — ask an admin)"
+    locked: "&c(locked)"
+    empty: "&8(empty)"
+    # A stored set: {pieces} lists its armor, e.g. "Diamond Helmet, Iron Boots".
+    pieces: "&7{pieces}"

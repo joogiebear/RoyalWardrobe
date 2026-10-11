@@ -5,7 +5,7 @@
 #
 # Item syntax: <material> [hide_attributes] name:"&a..."
 # Placeholders in dye names and lore: %number% %set_name% %pieces% %first_worn%
-# (%set_name% is the name given with right-click rename, or "Setup #N".)
+# (%set_name% is the name given with right-click rename, or default-name below.)
 
 title: "&8Wardrobe &7(%page%/%pages%)"
 
@@ -16,6 +16,11 @@ pages: 2
 # Date shown for a saved set (the day you first wore it).
 date-format: "MMM d, yyyy"
 never-worn: "&7—"
+
+# Name of a set nobody has renamed (%number% is its slot). Also used by /wardrobe list.
+default-name: "Setup #%number%"
+# %pieces% for a set with no armor in it.
+no-pieces: "empty"
 
 # Sound names: BLOCK_CHEST_OPEN style or a namespaced key (minecraft:block.chest.open).
 sounds:

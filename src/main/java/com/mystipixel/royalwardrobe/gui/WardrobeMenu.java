@@ -2,7 +2,9 @@ package com.mystipixel.royalwardrobe.gui;
 
 import com.mystipixel.royalwardrobe.RoyalWardrobePlugin;
 import com.mystipixel.royalwardrobe.gui.menu.ItemSpec;
+import com.mystipixel.royalwardrobe.message.MessageManager;
 import com.mystipixel.royalwardrobe.storage.WardrobeStorage;
+import com.mystipixel.royalwardrobe.util.BundledYaml;
 import com.mystipixel.royalwardrobe.util.Text;
 import com.mystipixel.royalwardrobe.wardrobe.ArmorSet;
 import com.mystipixel.royalwardrobe.wardrobe.WardrobeActions;
@@ -10,7 +12,6 @@ import com.mystipixel.royalwardrobe.wardrobe.WardrobeData;
 import io.papermc.paper.datacomponent.DataComponentTypes;
 import io.papermc.paper.datacomponent.item.Equippable;
 import org.bukkit.configuration.file.FileConfiguration;
-import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
 import org.bukkit.event.inventory.InventoryType;
 import org.bukkit.inventory.Inventory;
@@ -65,7 +66,7 @@ public final class WardrobeMenu {
         if (!file.exists()) {
             plugin.saveResource("gui/wardrobe.yml", false);
         }
-        this.gui = YamlConfiguration.loadConfiguration(file);
+        this.gui = BundledYaml.load(plugin, "gui/wardrobe.yml");
         this.columns = Math.max(1, Math.min(9, gui.getInt("columns-per-page", 9)));
         this.pages = Math.max(1, gui.getInt("pages", 2));
         int base = NAV_ROW * 9;
@@ -153,7 +154,7 @@ public final class WardrobeMenu {
     }
 
     private String title(int page, int totalPages) {
-        return gui.getString("title", "&8&lWardrobe (%page%/%pages%)")
+        return gui.getString("title")
                 .replace("%page%", Integer.toString(page + 1))
                 .replace("%pages%", Integer.toString(totalPages));
     }
@@ -306,7 +307,7 @@ public final class WardrobeMenu {
         if (inv == null) {
             return;                              // command-driven session with no open menu
         }
-        ItemStack navFiller = item("nav.filler", "gray_stained_glass_pane name:\" \"", null, Map.of());
+        ItemStack navFiller = item("nav.filler", null, Map.of());
         for (int i = 0; i < SIZE; i++) {
             inv.setItem(i, navFiller.clone());
         }
@@ -323,11 +324,10 @@ public final class WardrobeMenu {
             if (data.isCorrupt(setIndex)) {
                 // never show an unreadable row as an empty slot to fill
                 for (int row = 0; row < ArmorSet.SIZE; row++) {
-                    inv.setItem(c + row * 9, item("corrupt-slot.item",
-                            "black_stained_glass_pane name:\"&4Damaged\"", null, Map.of()));
+                    inv.setItem(c + row * 9, item("corrupt-slot.item", null, Map.of()));
                 }
-                inv.setItem(c + DYE_ROW * 9, item("dye.corrupt.item", "structure_void name:\"&4&lDamaged Slot\"",
-                        "dye.corrupt.lore", Map.of("number", Integer.toString(setIndex + 1))));
+                inv.setItem(c + DYE_ROW * 9, item("dye.corrupt.item", "dye.corrupt.lore",
+                        Map.of("number", Integer.toString(setIndex + 1))));
                 continue;
             }
             ArmorSet set = active ? wornSet(player) : data.set(setIndex);
@@ -338,23 +338,23 @@ public final class WardrobeMenu {
                     inv.setItem(c + row * 9, piece.clone());
                 } else {
                     inv.setItem(c + row * 9, locked
-                            ? item("locked-slot.item", "red_stained_glass_pane name:\"&cLocked\"", null, Map.of())
-                            : item("empty-slot.item", "light_gray_stained_glass_pane name:\" \"", null, Map.of()));
+                            ? item("locked-slot.item", null, Map.of())
+                            : item("empty-slot.item", null, Map.of()));
                 }
             }
             inv.setItem(c + DYE_ROW * 9, locked
-                    ? item("dye.locked.item", "barrier name:\"&c&lLocked Slot\"", "dye.locked.lore",
+                    ? item("dye.locked.item", "dye.locked.lore",
                             Map.of("number", Integer.toString(setIndex + 1)))
                     : dyeFor(set, active, setIndex, data));
         }
 
         if (page > 0) {
-            inv.setItem(previousSlot, item("nav.previous.item", "arrow name:\"&ePrevious Page\"", "nav.previous.lore", Map.of()));
+            inv.setItem(previousSlot, item("nav.previous.item", "nav.previous.lore", Map.of()));
         }
         if (page < pagesFor(data) - 1) {
-            inv.setItem(nextSlot, item("nav.next.item", "arrow name:\"&eNext Page\"", "nav.next.lore", Map.of()));
+            inv.setItem(nextSlot, item("nav.next.item", "nav.next.lore", Map.of()));
         }
-        inv.setItem(closeSlot, item("nav.close.item", "barrier name:\"&cClose\"", "nav.close.lore", Map.of()));
+        inv.setItem(closeSlot, item("nav.close.item", "nav.close.lore", Map.of()));
         for (Button button : buttons) {
             inv.setItem(button.index(), ItemSpec.parse(button.spec()).build(Map.of(), button.lore()));
         }
@@ -366,7 +366,8 @@ public final class WardrobeMenu {
         String custom = data.name(setIndex);
         // cleaned on display too, for names stored before codes were stripped on entry
         String clean = custom == null ? "" : cleanName(custom);
-        return !clean.isEmpty() ? clean : "Setup #" + (setIndex + 1);
+        return !clean.isEmpty() ? clean
+                : gui.getString("default-name").replace("%number%", Integer.toString(setIndex + 1));
     }
 
     private ItemStack dyeFor(ArmorSet set, boolean active, int setIndex, WardrobeData data) {
@@ -376,12 +377,12 @@ public final class WardrobeMenu {
         ph.put("pieces", pieces(set));
         ph.put("first_worn", date(data.firstWorn(setIndex)));
         if (active) {
-            return item("dye.unequip.item", "lime_dye name:\"&aActive: %set_name%\"", "dye.unequip.lore", ph);
+            return item("dye.unequip.item", "dye.unequip.lore", ph);
         }
         if (set != null && !set.isEmpty()) {
-            return item("dye.equip.item", "pink_dye name:\"&d%set_name%\"", "dye.equip.lore", ph);
+            return item("dye.equip.item", "dye.equip.lore", ph);
         }
-        return item("dye.store.item", "gray_dye name:\"&7Store Current Setup\"", "dye.store.lore", ph);
+        return item("dye.store.item", "dye.store.lore", ph);
     }
 
     public void handleClick(Player player, WardrobeHolder holder, int slot, boolean rightClick) {
@@ -566,8 +567,7 @@ public final class WardrobeMenu {
             message(player, "nothing-to-rename");
             return;
         }
-        List<String> title = plugin.messages().lines("input.rename",
-                List.of("&fName this setup", "&7Leave it blank to cancel."));
+        List<String> title = plugin.messages().lines("input.rename");
         textInput.request(player, title,
                 typed -> {
                     if (!player.isOnline() || (typed == null && !canReopen(player))) {
@@ -730,7 +730,8 @@ public final class WardrobeMenu {
         withSession(player, session -> {
             WardrobeData data = session.data();
             int allowed = allowedSlots(player);
-            player.sendMessage(Text.of("&6&lWardrobe &7— /wardrobe equip <number>"));
+            MessageManager messages = plugin.messages();
+            messages.sendPlain(player, "list.header", Map.of());
             for (int i = 0; i < data.capacity(); i++) {
                 boolean active = data.activeIndex() == i;
                 boolean locked = i >= allowed;
@@ -738,12 +739,13 @@ public final class WardrobeMenu {
                 if (!active && set.isEmpty() && data.name(i) == null && locked && !data.isCorrupt(i)) {
                     continue;
                 }
-                String state = active ? "&a(wearing)"
-                        : data.isCorrupt(i) ? "&4(damaged — ask an admin)"
-                        : locked ? "&c(locked)"
-                        : set.isEmpty() ? "&8(empty)"
-                        : "&7" + pieces(set);
-                player.sendMessage(Text.of("&e" + (i + 1) + ". &f" + setName(data, i) + " " + state));
+                String state = active ? messages.get("list.state.wearing")
+                        : data.isCorrupt(i) ? messages.get("list.state.damaged")
+                        : locked ? messages.get("list.state.locked")
+                        : set.isEmpty() ? messages.get("list.state.empty")
+                        : messages.format("list.state.pieces", Map.of("pieces", pieces(set)));
+                messages.sendPlain(player, "list.line", Map.of(
+                        "number", Integer.toString(i + 1), "name", setName(data, i), "state", state));
             }
         });
     }
@@ -836,15 +838,15 @@ public final class WardrobeMenu {
         persist(holder, false, index);
     }
 
-    private ItemStack item(String itemPath, String def, String lorePath, Map<String, String> ph) {
-        String spec = gui.getString(itemPath, def);
+    private ItemStack item(String itemPath, String lorePath, Map<String, String> ph) {
+        String spec = gui.getString(itemPath);
         List<String> lore = lorePath == null ? List.of() : gui.getStringList(lorePath);
         return ItemSpec.parse(spec).build(ph, lore);
     }
 
     private String pieces(ArmorSet set) {
         if (set == null || set.isEmpty()) {
-            return "empty";
+            return gui.getString("no-pieces");
         }
         return Arrays.stream(set.pieces())
                 .filter(p -> p != null && !p.getType().isAir())
@@ -854,13 +856,13 @@ public final class WardrobeMenu {
 
     private String date(long millis) {
         if (millis <= 0) {
-            return gui.getString("never-worn", "—");
+            return gui.getString("never-worn");
         }
         try {
-            DateTimeFormatter fmt = DateTimeFormatter.ofPattern(gui.getString("date-format", "MMM d, yyyy"), Locale.ENGLISH);
+            DateTimeFormatter fmt = DateTimeFormatter.ofPattern(gui.getString("date-format"), Locale.ENGLISH);
             return fmt.format(Instant.ofEpochMilli(millis).atZone(ZoneId.systemDefault()));
         } catch (RuntimeException e) {
-            return "—";
+            return gui.getString("never-worn");
         }
     }
 
@@ -914,32 +916,11 @@ public final class WardrobeMenu {
                 (float) gui.getDouble("sounds." + key + ".pitch", 1.0));
     }
 
-    // fallbacks for keys missing from messages.yml
-    private static final Map<String, String> DEFAULT_MESSAGES = Map.ofEntries(
-            Map.entry("equipped", "&aEquipped that setup."),
-            Map.entry("stored", "&aStored your current setup."),
-            Map.entry("unequipped", "&aUnequipped your setup."),
-            Map.entry("no-armor", "&cYou aren't wearing any armor to store."),
-            Map.entry("already-active", "&cYou're already wearing a saved setup — unequip it first."),
-            Map.entry("slot-locked", "&cThat wardrobe slot is locked. Unlock more with a rank or perk."),
-            Map.entry("inventory-full", "&cMake room in your inventory first."),
-            Map.entry("save-failed", "&cYour wardrobe could not be saved — tell an admin before changing more sets."),
-            Map.entry("save-pending", "&cYour last wardrobe change isn't saved yet. The wardrobe stays locked until it is."),
-            Map.entry("save-recovered", "&aYour wardrobe has been saved and can be used again."),
-            Map.entry("renamed", "&aSetup renamed."),
-            Map.entry("nothing-to-rename", "&cStore a setup there first, then name it."),
-            Map.entry("no-such-slot", "&cNo wardrobe slot with that number."),
-            Map.entry("already-wearing", "&eYou're already wearing that setup."),
-            Map.entry("setup-empty", "&cThat setup is empty."),
-            Map.entry("no-profile", "&cJoin or create a profile before using your wardrobe."),
-            Map.entry("load-failed", "&cYour wardrobe couldn't be loaded right now. Try again shortly."),
-            Map.entry("slot-corrupt", "&cThat wardrobe slot is damaged and can't be used — tell an admin."));
-
     void notifySaved(Player player) {
         message(player, "save-recovered");
     }
 
     private void message(Player player, String key) {
-        plugin.messages().send(player, key, DEFAULT_MESSAGES.getOrDefault(key, ""));
+        plugin.messages().send(player, key);
     }
 }
