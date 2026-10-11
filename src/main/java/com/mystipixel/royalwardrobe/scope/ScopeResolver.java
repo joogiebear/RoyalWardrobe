@@ -6,22 +6,12 @@ import org.bukkit.entity.Player;
 import java.util.Locale;
 
 /**
- * Decides which "scope" a player's wardrobe belongs to, so sets don't leak across separate profiles.
+ * Decides which scope a player's wardrobe belongs to: the active-profile id when the scope placeholder's
+ * PlaceholderAPI expansion is registered, otherwise one {@link #GLOBAL} wardrobe per player.
  *
- * <p>When the scope placeholder's expansion is registered with PlaceholderAPI (RoyalSkyblock's
- * {@code %royalskyblock_profile_id%} by default), the scope is the player's active-profile id — so an
- * Ironman profile keeps its own wardrobe, exactly like Hypixel. When it isn't (no PlaceholderAPI, no
- * such expansion, or a blank placeholder), every player has one {@link #GLOBAL} wardrobe.
- *
- * <p>In per-profile mode an unresolved placeholder (a player between profiles) yields {@code null},
- * not {@link #GLOBAL}. The global wardrobe is shared by every profile, so falling back to it would let
- * gear be stored from one profile and taken out in another. No compile-time coupling to either plugin:
- * PlaceholderAPI is only touched when it's installed.
- *
- * <p>Once the expansion has been seen, per-profile mode sticks: an expansion that is unregistered at
- * runtime ({@code /papi reload}, the profile plugin reloading) must refuse wardrobes until it's back,
- * not quietly fall back to the global one. A restart re-decides, so removing the profile plugin still
- * returns the server to per-player wardrobes.
+ * <p>In per-profile mode an unresolved placeholder yields {@code null}, never {@link #GLOBAL}: the global
+ * wardrobe is shared by every profile, so falling back to it would move gear between profiles. Per-profile
+ * mode stays latched once the expansion has been seen, until a restart.
  */
 public final class ScopeResolver {
 
@@ -55,7 +45,7 @@ public final class ScopeResolver {
         String resolved = me.clip.placeholderapi.PlaceholderAPI.setPlaceholders(player, placeholder);
         if (resolved != null) {
             resolved = resolved.trim();
-            // A resolved value still containing '%' means no expansion handled it — treat as absent.
+            // still containing '%' means no expansion handled it
             if (!resolved.isEmpty() && !resolved.contains("%")) {
                 return resolved;
             }
@@ -72,7 +62,6 @@ public final class ScopeResolver {
         return seenExpansion;
     }
 
-    /** The mode decision: per-profile when the expansion is registered now or was seen before. */
     static boolean perProfile(boolean registeredNow, boolean seenBefore) {
         return registeredNow || seenBefore;
     }
@@ -82,7 +71,7 @@ public final class ScopeResolver {
                 && me.clip.placeholderapi.PlaceholderAPI.isRegistered(expansion);
     }
 
-    /** The expansion identifier a placeholder belongs to: {@code %royalskyblock_profile_id%} → "royalskyblock". */
+    // %royalskyblock_profile_id% -> "royalskyblock"
     static String expansionOf(String placeholder) {
         if (placeholder == null || !placeholder.startsWith("%")) {
             return null;

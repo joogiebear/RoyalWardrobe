@@ -19,16 +19,10 @@ import java.util.function.Consumer;
 import java.util.logging.Level;
 
 /**
- * The one live copy of each online player's wardrobe.
+ * The one live copy of each online player's wardrobe. Every path (menu, commands, rename) must use it:
+ * a second copy goes stale and lets a set's pieces be taken twice.
  *
- * <p>Every way in — the menu, {@code /wardrobe equip}, {@code /wardrobe list}, a rename returning from
- * its dialog — works on the same {@link WardrobeData}. When each of them loaded a private copy instead,
- * a copy read before another path's change was queued would still show a set as stored after it had
- * been equipped, and its pieces could be taken a second time. With one copy there is nothing to go
- * stale: the database is read once per player and scope, and only written after that.
- *
- * <p>Main-thread only. Loads still go through the storage writer thread, so they queue behind any
- * write from an earlier session.
+ * <p>Main-thread only. Loads go through the storage writer thread, so they queue behind earlier writes.
  */
 public final class WardrobeSessions implements Listener {
 
@@ -74,8 +68,7 @@ public final class WardrobeSessions implements Listener {
                 ready.accept(current);
                 return;
             }
-            // Profile switched, or the menu grew: this copy is finished with. Shut any menu still
-            // showing it, so it can't keep being edited alongside the copy that replaces it.
+            // profile switched or the menu grew: close any menu still editing the old copy
             closeMenuFor(player, current.data());
             live.remove(id);
         }
@@ -115,7 +108,7 @@ public final class WardrobeSessions implements Listener {
         });
     }
 
-    /** Whether {@code data} is still the live copy — a callback that outlived its session must not write. */
+    /** Whether {@code data} is still the live copy. A callback that outlived its session must not write. */
     public boolean isLive(UUID owner, WardrobeData data) {
         Session session = live.get(owner);
         return session != null && session.data() == data;

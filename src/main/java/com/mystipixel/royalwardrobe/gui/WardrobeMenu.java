@@ -31,28 +31,24 @@ import java.util.UUID;
 import java.util.stream.Collectors;
 
 /**
- * The wardrobe GUI, modelled on Hypixel's: each of the 9 columns is one armor set — 4 stacked piece
- * slots (helmet→boots) with a control dye below, and a bottom nav row (page arrows + close). Multiple
- * pages. Everything visual comes from {@code gui/wardrobe.yml} in the suite's item-spec/sounds style.
+ * The wardrobe GUI: each column is one armor set (four piece slots, helmet to boots, with a control dye
+ * below) and the bottom row is navigation. Layout and items come from {@code gui/wardrobe.yml}.
  *
- * <p><b>Dupe-safe by construction.</b> The <em>active</em> set (the one you're wearing) lives on the
- * player, not in storage — its column mirrors your armor and is locked. Equipping another set writes
- * your current set back to its column (or loose armor to your inventory) and moves the new set onto
- * you; storing/unequipping/manual placement all move single items via the cursor. No item is ever
- * copied, so nothing can be duplicated.
+ * <p>The active set lives on the player, so its column mirrors their armor and is locked. Every action
+ * moves items, never copies them.
  */
 public final class WardrobeMenu {
 
     private static final int SIZE = 54;
-    private static final int DYE_ROW = 4;      // row index of the control dyes
-    private static final int NAV_ROW = 5;      // bottom navigation row
+    private static final int DYE_ROW = 4;
+    private static final int NAV_ROW = 5;
 
     private final RoyalWardrobePlugin plugin;
     private final TextInput textInput;
     private FileConfiguration gui;
     private int columns;
     private int pages;
-    // Parsed once per reload, so a misplaced entry is reported once rather than on every click.
+    // parsed once per reload, so a misplaced entry is reported once rather than on every click
     private List<Button> buttons = List.of();
     private int previousSlot;
     private int nextSlot;
@@ -83,19 +79,14 @@ public final class WardrobeMenu {
         return columns * pages;
     }
 
-    /**
-     * Pages needed to show {@code data}: the configured count, or more when sets are stored past it
-     * because the menu was shrunk. Those slots sit past the player's allowance, so they render locked —
-     * their gear stays visible and can be taken out, it just can't be added to.
-     */
+    // more than the configured pages when sets are stored past a shrunk menu; those render locked
     private int pagesFor(WardrobeData data) {
         return Math.max(pages, (data.capacity() + columns - 1) / columns);
     }
 
     /**
-     * How many slots a player may use: {@code slots.default}, raised by the highest
-     * {@code <slots.permission>.<n>} they hold ({@code .*} grants the maximum), clamped to the menu's
-     * capacity. Any permission plugin can hand these out with ranks or perks.
+     * {@code slots.default}, raised by the highest {@code <slots.permission>.<n>} the player holds
+     * ({@code .*} grants the maximum), clamped to the menu's capacity.
      */
     public int allowedSlots(Player player) {
         int max = Math.min(capacity(), plugin.getConfig().getInt("slots.max", capacity()));
@@ -104,7 +95,7 @@ public final class WardrobeMenu {
                 .toLowerCase(Locale.ROOT) + ".";
         for (PermissionAttachmentInfo info : player.getEffectivePermissions()) {
             if (!info.getValue()) {
-                continue;                        // explicitly negated
+                continue;
             }
             String perm = info.getPermission().toLowerCase(Locale.ROOT);
             if (!perm.startsWith(prefix)) {
@@ -117,34 +108,26 @@ public final class WardrobeMenu {
             try {
                 allowed = Math.max(allowed, Integer.parseInt(suffix));
             } catch (NumberFormatException notANumber) {
-                // e.g. royalwardrobe.slots.something — ignore
+                // e.g. royalwardrobe.slots.something
             }
         }
         return Math.max(0, Math.min(allowed, max));
     }
 
-    // ── open / paging ──────────────────────────────────────────────────────────────
-
     public void open(Player player) {
         withSession(player, session -> {
-            // Resolved once per open, so the layout can't shift mid-session if perms change.
+            // resolved once per open, so the layout can't shift mid-session if perms change
             int allowed = allowedSlots(player);
             openPage(player, new WardrobeHolder(player.getUniqueId(), session.scope(), session.data(), 0, allowed), 0);
             playSound(player, "open");
         });
     }
 
-    /**
-     * Run {@code action} against the player's live wardrobe (see {@link WardrobeSessions}), loading it
-     * behind any queued writes if it isn't in memory yet. A wardrobe that can't be read is refused
-     * outright rather than shown empty — storing into a "free" slot would overwrite the set still in
-     * the table.
-     */
+    // an unreadable wardrobe is refused, not shown empty: storing into a "free" slot would overwrite the real set
     private void withSession(Player player, java.util.function.Consumer<WardrobeSessions.Session> action) {
         String scope = plugin.scopes().scopeFor(player);
         if (scope == null) {
-            // Per-profile wardrobes, but no profile resolves (between profiles). Refuse rather than
-            // fall back to the shared wardrobe, which would carry gear from one profile to another.
+            // between profiles: falling back to the shared wardrobe would carry gear across profiles
             playSound(player, "fail");
             message(player, "no-profile");
             return;
@@ -175,14 +158,9 @@ public final class WardrobeMenu {
                 .replace("%pages%", Integer.toString(totalPages));
     }
 
-    /** An admin-defined button: an item at a slot, with the effects its click runs. */
     private record Button(int index, String spec, List<String> lore, List<Map<?, ?>> effects) {
     }
 
-    /**
-     * Extra buttons declared in {@code buttons:}. The armour grid is computed rather than authored, so
-     * this is how a menu gains anything beyond the built-in navigation without touching code.
-     */
     private List<Button> parseButtons() {
         List<Button> out = new ArrayList<>();
         List<Map<?, ?>> raw = gui.getMapList("buttons");
@@ -190,18 +168,18 @@ public final class WardrobeMenu {
             Map<?, ?> entry = raw.get(i);
             Object item = entry.get("item");
             if (item == null) {
-                plugin.getLogger().warning("Button " + i + " in the wardrobe menu has no 'item:' — skipping.");
+                plugin.getLogger().warning("Button " + i + " in the wardrobe menu has no 'item:', skipping.");
                 continue;
             }
             int index = slotIndexOf(entry, -1);
             if (index < 0 || index >= SIZE) {
                 plugin.getLogger().warning("Button " + i + " in the wardrobe menu has no valid row/column"
-                        + " or slot — skipping.");
+                        + " or slot, skipping.");
                 continue;
             }
             if (index < NAV_ROW * 9) {
                 plugin.getLogger().warning("Button " + i + " sits at slot " + index + ", inside the wardrobe"
-                        + " grid — it will cover a gear slot. Move it to the bottom row if that wasn't intended.");
+                        + " grid: it will cover a gear slot. Move it to the bottom row if that wasn't intended.");
             }
             List<String> lore = new ArrayList<>();
             Object rawLore = entry.get("lore");
@@ -224,7 +202,6 @@ public final class WardrobeMenu {
         return out;
     }
 
-    /** The {@code left-click:} effects configured under a nav entry, empty when it has none. */
     private List<Map<?, ?>> clickEffects(String path) {
         List<Map<?, ?>> out = new ArrayList<>();
         for (Map<?, ?> effect : gui.getMapList(path + ".left-click")) {
@@ -233,7 +210,7 @@ public final class WardrobeMenu {
         return out;
     }
 
-    /** row/column (1-indexed) or a raw slot, from an inline config map. */
+    // row/column (1-indexed) or a raw slot
     private static int slotIndexOf(Map<?, ?> entry, int def) {
         Object row = entry.get("row");
         Object column = entry.get("column");
@@ -247,11 +224,7 @@ public final class WardrobeMenu {
         return slot instanceof Number n ? n.intValue() : def;
     }
 
-    /**
-     * Run a click's configured effects. Same vocabulary as the other Royal menus, so an admin who has
-     * configured one of them already knows this one. Returns false when nothing was configured, letting
-     * the caller fall back to the button's built-in behaviour.
-     */
+    // same effect ids as the other Royal menus; false when none are configured, so the caller falls back
     private boolean runEffects(Player player, List<Map<?, ?>> effects) {
         if (effects == null || effects.isEmpty()) {
             return false;
@@ -263,8 +236,7 @@ public final class WardrobeMenu {
             switch (id) {
                 case "close", "close_inventory" -> player.closeInventory();
                 case "message" -> player.sendMessage(Text.of(arg(a, "message")));
-                // Next tick: the command may open another plugin's menu, which is unreliable from
-                // inside the click event that is still processing this one.
+                // next tick: opening another plugin's menu from inside this click event is unreliable
                 case "player_command" -> {
                     String command = arg(a, "command");
                     plugin.getServer().getScheduler().runTask(plugin, () -> player.performCommand(command));
@@ -280,7 +252,6 @@ public final class WardrobeMenu {
         return true;
     }
 
-    /** Play a sound named directly by a click effect, rather than one of the configured sound keys. */
     private void playRawSound(Player player, String name, float volume, float pitch) {
         if (name == null || name.isBlank()) {
             return;
@@ -288,15 +259,11 @@ public final class WardrobeMenu {
         playNamedSound(player, name, volume, pitch);
     }
 
-    /** Sound names as configs write them (BLOCK_CHEST_OPEN) → their registry keys (block.chest.open). */
+    // BLOCK_CHEST_OPEN -> block.chest.open
     private static Map<String, String> soundKeys;
     private final java.util.Set<String> unknownSounds = new java.util.HashSet<>();
 
-    /**
-     * Play a sound named in config. Accepts the classic constant style ({@code BLOCK_CHEST_OPEN}) that
-     * every existing config uses, or a namespaced key ({@code minecraft:block.chest.open}, or a
-     * resource pack's own). Replaces {@code Sound.valueOf}, which Paper has marked for removal.
-     */
+    // accepts BLOCK_CHEST_OPEN or a namespaced key (minecraft:block.chest.open, or a resource pack's own)
     private void playNamedSound(Player player, String name, float volume, float pitch) {
         String key;
         if (name.indexOf('.') >= 0 || name.indexOf(':') >= 0) {
@@ -325,7 +292,6 @@ public final class WardrobeMenu {
         return soundKeys;
     }
 
-    /** A string arg from an effect's args map, or "" when absent. */
     private static String arg(Map<?, ?> args, String key) {
         Object value = args.get(key);
         return value == null ? "" : String.valueOf(value);
@@ -334,8 +300,6 @@ public final class WardrobeMenu {
     private static float toFloat(Object value, float def) {
         return value instanceof Number n ? n.floatValue() : def;
     }
-
-    // ── render ─────────────────────────────────────────────────────────────────────
 
     public void render(Player player, WardrobeHolder holder) {
         Inventory inv = holder.getInventory();
@@ -352,12 +316,12 @@ public final class WardrobeMenu {
         for (int c = 0; c < columns; c++) {
             int setIndex = page * columns + c;
             if (setIndex >= data.capacity()) {
-                break;                           // past the last slot on a part-filled final page
+                break;
             }
             boolean active = data.activeIndex() == setIndex;
             boolean locked = holder.isLocked(setIndex);
             if (data.isCorrupt(setIndex)) {
-                // Its stored row is unreadable: show it as damaged, never as an empty slot to fill.
+                // never show an unreadable row as an empty slot to fill
                 for (int row = 0; row < ArmorSet.SIZE; row++) {
                     inv.setItem(c + row * 9, item("corrupt-slot.item",
                             "black_stained_glass_pane name:\"&4Damaged\"", null, Map.of()));
@@ -370,8 +334,7 @@ public final class WardrobeMenu {
             for (int row = 0; row < ArmorSet.SIZE; row++) {
                 ItemStack piece = set.piece(row);
                 if (piece != null && !piece.getType().isAir()) {
-                    // Gear is always shown, even in a locked slot, so it stays visible and retrievable
-                    // if the player's allowance shrank (rank expired) — never stranded.
+                    // shown even in a locked slot, so gear stays retrievable if the allowance shrank
                     inv.setItem(c + row * 9, piece.clone());
                 } else {
                     inv.setItem(c + row * 9, locked
@@ -401,7 +364,7 @@ public final class WardrobeMenu {
     /** The default or player-given name for a set, used in dyes, lists and messages alike. */
     public String setName(WardrobeData data, int setIndex) {
         String custom = data.name(setIndex);
-        // Cleaned on display too, for names stored before codes were stripped on entry.
+        // cleaned on display too, for names stored before codes were stripped on entry
         String clean = custom == null ? "" : cleanName(custom);
         return !clean.isEmpty() ? clean : "Setup #" + (setIndex + 1);
     }
@@ -421,15 +384,13 @@ public final class WardrobeMenu {
         return item("dye.store.item", "gray_dye name:\"&7Store Current Setup\"", "dye.store.lore", ph);
     }
 
-    // ── click handling (all clicks are cancelled by the listener; we move items ourselves) ──
-
     public void handleClick(Player player, WardrobeHolder holder, int slot, boolean rightClick) {
         int row = slot / 9;
         int col = slot % 9;
         WardrobeData data = holder.data();
 
         if (row <= DYE_ROW && (col >= columns || holder.page() * columns + col >= data.capacity())) {
-            return;                              // filler: no slot here
+            return;
         }
         if (row <= DYE_ROW && data.isCorrupt(holder.page() * columns + col)) {
             playSound(player, "fail");
@@ -442,7 +403,7 @@ public final class WardrobeMenu {
             }
             int setIndex = holder.page() * columns + col;
             if (data.activeIndex() == setIndex) {
-                return;                          // active setup is locked — can't be modified here
+                return;                          // the active set is locked
             }
             handleArmorSlot(player, holder, setIndex, row);
             return;
@@ -464,8 +425,7 @@ public final class WardrobeMenu {
             }
             return;
         }
-        // Admin-defined buttons are checked first so one can sit on the nav row without being
-        // swallowed by the built-in paging behaviour.
+        // admin buttons first, so one can sit on the nav row without being swallowed by paging
         for (Button button : buttons) {
             if (button.index() == slot) {
                 runEffects(player, button.effects());
@@ -474,7 +434,7 @@ public final class WardrobeMenu {
         }
         if (row == NAV_ROW) {
             if (slot == previousSlot && holder.page() > 0) {
-                // A configured left-click replaces the built-in behaviour; without one, page as before.
+                // a configured left-click replaces the built-in behaviour
                 if (!runEffects(player, clickEffects("nav.previous"))) {
                     openPage(player, holder, holder.page() - 1);
                 }
@@ -490,7 +450,6 @@ public final class WardrobeMenu {
         }
     }
 
-    /** Cursor-based place/take of a single piece into an inactive column's slot. Armor-type validated. */
     private void handleArmorSlot(Player player, WardrobeHolder holder, int setIndex, int row) {
         ArmorSet set = holder.data().set(setIndex);
         ItemStack cursor = player.getItemOnCursor();
@@ -502,11 +461,11 @@ public final class WardrobeMenu {
             return;
         }
         final ItemStack newCursor;
-        if (cursorEmpty) {                       // take the stored piece onto the cursor
+        if (cursorEmpty) {
             newCursor = current;
             set.pieces()[row] = null;
-        } else {                                 // place the cursor piece, swap the old one out
-            // A locked slot can still be emptied (above), but nothing new goes in.
+        } else {
+            // a locked slot can still be emptied, but nothing new goes in
             if (holder.isLocked(setIndex)) {
                 playSound(player, "fail");
                 message(player, "slot-locked");
@@ -516,8 +475,7 @@ public final class WardrobeMenu {
                 playSound(player, "fail");
                 return;
             }
-            // A set slot holds one piece. Some wearables stack (heads, pumpkins, custom items), so
-            // place one and keep the rest on the cursor; a stack can't be swapped for a stored piece.
+            // some wearables stack: place one and keep the rest; a stack can't be swapped for a stored piece
             if (cursor.getAmount() > 1) {
                 if (!currentEmpty) {
                     playSound(player, "fail");
@@ -534,12 +492,11 @@ public final class WardrobeMenu {
                 set.pieces()[row] = cursor.clone();
             }
         }
-        player.setItemOnCursor(newCursor);       // server-side now, so there's no dupe window
+        player.setItemOnCursor(newCursor);
         persist(holder, setIndex);
         render(player, holder);
-        // Resync the client's view next tick, after the cancelled click has been answered. This must
-        // only resend state, never set the cursor again: clicks can land before the task runs, and
-        // re-setting it would hand back a fresh copy of a piece the player already put down.
+        // next tick, after the cancelled click is answered. Only resend state, never set the cursor again:
+        // a click landing before this runs would get back a copy of a piece already put down.
         plugin.getServer().getScheduler().runTask(plugin, () -> {
             if (player.isOnline()) {
                 player.updateInventory();
@@ -548,9 +505,8 @@ public final class WardrobeMenu {
     }
 
     /**
-     * Shift-click deposit: drop one armor piece from the player's inventory into the first empty slot
-     * of the matching row on the current page (skipping the locked active column). Returns true if it
-     * was placed (the caller then removes one from the source stack). Keeps everything a single-item move.
+     * Shift-click deposit: place one armor piece into the first free matching slot on the current page.
+     * Returns true if placed; the caller then removes one from the source stack.
      */
     public boolean tryDeposit(Player player, WardrobeHolder holder, ItemStack item) {
         if (item == null || item.getType().isAir()) {
@@ -558,7 +514,7 @@ public final class WardrobeMenu {
         }
         int row = armorRow(item);
         if (row < 0) {
-            return false;                        // not a wearable armor piece
+            return false;
         }
         WardrobeData data = holder.data();
         int page = holder.page();
@@ -568,7 +524,7 @@ public final class WardrobeMenu {
                 break;
             }
             if (data.activeIndex() == setIndex || holder.isLocked(setIndex) || data.isCorrupt(setIndex)) {
-                continue;                        // active column, one they haven't unlocked, or unreadable
+                continue;
             }
             ItemStack existing = data.set(setIndex).piece(row);
             if (existing == null || existing.getType().isAir()) {
@@ -581,15 +537,10 @@ public final class WardrobeMenu {
                 return true;
             }
         }
-        return false;                            // no empty matching slot on this page
+        return false;
     }
 
-    /**
-     * The set row an item is worn in, or -1 if it can't be worn as armor. Read from the item's
-     * {@code equippable} component, which is what the game itself uses: it covers every armor piece,
-     * elytra, heads and carved pumpkins, and any custom item a server has made wearable — and turns
-     * away things that merely have an armor-like name.
-     */
+    // from the equippable component, as the game does, so heads, elytra and custom wearables count
     private static int armorRow(ItemStack item) {
         if (item == null || item.isEmpty()) {
             return -1;
@@ -607,11 +558,7 @@ public final class WardrobeMenu {
         };
     }
 
-    /**
-     * Right-click on a set's dye: name the set in a dialog. Names are what turn "Setup #3" into
-     * "PvP" once a player owns more than a couple of sets. Renaming the active set is allowed —
-     * a name is metadata about the column, not about where its items currently live.
-     */
+    // the active set can be renamed too: a name belongs to the column, not to where its items are
     private void rename(Player player, WardrobeHolder holder, int setIndex) {
         WardrobeData data = holder.data();
         if (data.activeIndex() != setIndex && data.set(setIndex).isEmpty()) {
@@ -626,9 +573,8 @@ public final class WardrobeMenu {
                     if (!player.isOnline() || (typed == null && !canReopen(player))) {
                         return;
                     }
-                    // The menu was closed for the dialog, so the wardrobe may have changed meanwhile
-                    // (a command, a profile switch). Only name it if this is still the live copy, and
-                    // reopen on whatever is live now rather than on the copy captured before.
+                    // the wardrobe may have changed while the dialog was open: only name the live copy,
+                    // and reopen on whatever is live now
                     boolean named = false;
                     String name = typed == null ? "" : cleanName(typed);
                     if (!name.isEmpty() && plugin.sessions().isLive(holder.owner(), data)) {
@@ -658,17 +604,13 @@ public final class WardrobeMenu {
         return top == InventoryType.CRAFTING || top == InventoryType.CREATIVE;
     }
 
-    /** Colour and format codes: legacy (&a, &k, §l) and hex (&#rrggbb). */
+    // legacy (&a, &k, §l) and hex (&#rrggbb)
     private static final java.util.regex.Pattern FORMAT_CODES =
             java.util.regex.Pattern.compile("(?i)[&§](#[0-9a-f]{6}|[0-9a-fk-orx])");
 
-    /**
-     * A typed set name as plain text, trimmed and capped. Names are shown inside the menu's own
-     * formatting, so codes are stripped: otherwise a name could scramble itself with &k, or dress
-     * itself in the colours the menu uses for another state, such as the active set's green.
-     */
+    // codes stripped so a name can't use &k or mimic the menu's state colours
     static String cleanName(String typed) {
-        // Strip until nothing changes: one pass turns "&&aa" into "&a", which is a code again.
+        // strip until nothing changes: one pass turns "&&aa" into "&a", which is a code again
         String name = typed;
         String stripped;
         while (!(stripped = FORMAT_CODES.matcher(name).replaceAll("")).equals(name)) {
@@ -689,8 +631,6 @@ public final class WardrobeMenu {
         }
     }
 
-    // ── actions ────────────────────────────────────────────────────────────────────
-
     private void equip(Player player, WardrobeHolder holder, int target) {
         apply(player, holder, WardrobeActions.equip(holder.data(), body(player), target, now()));
     }
@@ -703,7 +643,6 @@ public final class WardrobeMenu {
         apply(player, holder, WardrobeActions.unequip(holder.data(), body(player)));
     }
 
-    /** Persist, redraw and tell the player how a move went. */
     private void apply(Player player, WardrobeHolder holder, WardrobeActions.Result result) {
         String sound;
         String key;
@@ -717,8 +656,7 @@ public final class WardrobeMenu {
             default -> { return; }
         }
         if (result.outcome().succeeded()) {
-            // Storing only relabels armor that stays on the player; equip and unequip move gear
-            // between the player and the table, so the player file is saved right behind the write.
+            // equip and unequip move gear between player and table, so the player file is saved too
             boolean movedGear = result.outcome() != WardrobeActions.Outcome.STORED;
             persist(holder, movedGear, result.changed());
             render(player, holder);
@@ -727,7 +665,6 @@ public final class WardrobeMenu {
         message(player, key);
     }
 
-    /** The player's armor and inventory, for {@link WardrobeActions}. */
     private WardrobeActions.Body body(Player player) {
         return new WardrobeActions.Body() {
             @Override
@@ -747,19 +684,13 @@ public final class WardrobeMenu {
         };
     }
 
-    // ── command-driven access (no GUI) ─────────────────────────────────────────────
-
-    /**
-     * Equip a set by index without opening the menu — {@code /wardrobe equip <n>}, keybinds, macros.
-     * Works on the same live wardrobe as the menu, so an open menu and a command can never disagree.
-     * All of {@link #equip}'s safety applies unchanged; render simply no-ops when there is no inventory.
-     */
+    /** Equip a set by index without opening the menu ({@code /wardrobe equip <n>}). */
     public void equipDirect(Player player, int setIndex) {
         withSession(player, session -> {
             WardrobeHolder holder;
             if (player.getOpenInventory().getTopInventory().getHolder() instanceof WardrobeHolder open
                     && open.data() == session.data()) {
-                holder = open;                   // redraw the menu they're looking at
+                holder = open;
             } else {
                 holder = new WardrobeHolder(player.getUniqueId(), session.scope(), session.data(), 0,
                         allowedSlots(player));
@@ -794,7 +725,7 @@ public final class WardrobeMenu {
         });
     }
 
-    /** Print the player's sets for {@code /wardrobe list}: index, name, contents, active/locked marks. */
+    /** Print the player's sets for {@code /wardrobe list}. */
     public void sendList(Player player) {
         withSession(player, session -> {
             WardrobeData data = session.data();
@@ -805,7 +736,7 @@ public final class WardrobeMenu {
                 boolean locked = i >= allowed;
                 ArmorSet set = data.set(i);
                 if (!active && set.isEmpty() && data.name(i) == null && locked && !data.isCorrupt(i)) {
-                    continue;                    // nothing to say about an empty locked slot
+                    continue;
                 }
                 String state = active ? "&a(wearing)"
                         : data.isCorrupt(i) ? "&4(damaged — ask an admin)"
@@ -816,8 +747,6 @@ public final class WardrobeMenu {
             }
         });
     }
-
-    // ── item / player helpers ────────────────────────────────────────────────────────
 
     private ArmorSet wornSet(Player player) {
         var inv = player.getInventory();
@@ -832,7 +761,6 @@ public final class WardrobeMenu {
         inv.setBoots(pieces[ArmorSet.BOOTS]);
     }
 
-    /** Move a worn set's pieces into the inventory (used when equipping over loose armor). */
     private boolean moveToInventory(Player player, ArmorSet worn) {
         List<ItemStack> items = new ArrayList<>();
         for (ItemStack piece : worn.pieces()) {
@@ -854,18 +782,9 @@ public final class WardrobeMenu {
         return armorRow(item) == row;
     }
 
-    /**
-     * Persist slots as one transaction. Snapshots on the main thread (the live array keeps being
-     * mutated by clicks) and queues the write on storage's single writer thread, so writes can't commit
-     * out of order and a shutdown drains them instead of dropping them.
-     *
-     * <p>An equip changes two slots, the set taken off and the set put on, and committing them
-     * separately left a window where only one was stored. With {@code savePlayer}, the owner's player
-     * file is saved as soon as the write commits. The table and the player file still can't commit
-     * atomically together, but this shrinks the gap a crash can fall into from the next autosave,
-     * minutes away, to about a second. Saves are coalesced per player, so spam-clicking writes the
-     * player file once a second rather than once per click.
-     */
+    // Snapshots on the main thread, then writes all slots in one transaction on the writer thread.
+    // savePlayer saves the player file about a second after the commit (coalesced per player), since
+    // the table and the player file can't commit atomically together.
     private void persist(WardrobeHolder holder, boolean savePlayer, int... indexes) {
         WardrobeData data = holder.data();
         UUID owner = holder.owner();
@@ -877,7 +796,7 @@ public final class WardrobeMenu {
         plugin.storage().submit(() -> {
             boolean saved = plugin.storage().saveAll(owner, scope, writes);
             if (!plugin.isEnabled()) {
-                return;                          // drained on disable: committed, nobody left to tell
+                return;                          // drained on disable: nobody left to tell
             }
             plugin.getServer().getScheduler().runTask(plugin, () -> {
                 if (!saved) {
@@ -888,7 +807,7 @@ public final class WardrobeMenu {
                     return;
                 }
                 if (!saved) {
-                    // Never fail silently — the gear is unaccounted for and the player must know.
+                    // never silent: the gear is unaccounted for
                     message(online, "save-failed");
                 } else if (savePlayer) {
                     savePlayerSoon(owner);
@@ -897,13 +816,12 @@ public final class WardrobeMenu {
         });
     }
 
-    /** Players with a player-file save already scheduled; see {@link #persist}. */
     private final java.util.Set<UUID> pendingPlayerSaves = new java.util.HashSet<>();
     private static final long PLAYER_SAVE_DELAY_TICKS = 20L;
 
     private void savePlayerSoon(UUID owner) {
         if (!pendingPlayerSaves.add(owner)) {
-            return;   // one is already on its way and will include this change
+            return;   // the scheduled save will include this change
         }
         plugin.getServer().getScheduler().runTaskLater(plugin, () -> {
             pendingPlayerSaves.remove(owner);
@@ -961,16 +879,11 @@ public final class WardrobeMenu {
         return b.toString();
     }
 
-    /**
-     * Where a nav button sits. Accepts a {@code row}/{@code column} pair (both 1-indexed, matching how
-     * every other menu in the suite places buttons) or a raw {@code slot} index, so configs written
-     * against the old format keep working. Falls back to {@code def} when neither is set.
-     */
+    // row/column (1-indexed) or a raw slot, so configs in the old format keep working
     private int navSlot(String key, int def) {
         return slotFrom("nav." + key, def);
     }
 
-    /** Resolve a row/column pair or raw slot under {@code path}, or {@code def} if neither is present. */
     private int slotFrom(String path, int def) {
         int row = gui.getInt(path + ".row", -1);
         int column = gui.getInt(path + ".column", -1);
@@ -980,7 +893,7 @@ public final class WardrobeMenu {
                 return index;
             }
             plugin.getLogger().warning("Menu entry '" + path + "' is at row " + row + ", column " + column
-                    + ", which is outside this menu — using the default slot instead.");
+                    + ", which is outside this menu; using the default slot instead.");
         }
         return gui.getInt(path + ".slot", def);
     }
@@ -988,8 +901,6 @@ public final class WardrobeMenu {
     private long now() {
         return System.currentTimeMillis();
     }
-
-    // ── sounds / messages ────────────────────────────────────────────────────────────
 
     private void playSound(Player player, String key) {
         if (!gui.getBoolean("sounds." + key + ".enabled", false)) {
@@ -1003,7 +914,7 @@ public final class WardrobeMenu {
                 (float) gui.getDouble("sounds." + key + ".pitch", 1.0));
     }
 
-    /** Built-in wording for each message, used when messages.yml doesn't define the key. */
+    // fallbacks for keys missing from messages.yml
     private static final Map<String, String> DEFAULT_MESSAGES = Map.ofEntries(
             Map.entry("equipped", "&aEquipped that setup."),
             Map.entry("stored", "&aStored your current setup."),

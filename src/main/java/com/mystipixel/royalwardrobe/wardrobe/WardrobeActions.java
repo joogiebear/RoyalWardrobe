@@ -3,13 +3,10 @@ package com.mystipixel.royalwardrobe.wardrobe;
 import org.bukkit.inventory.ItemStack;
 
 /**
- * The three moves between the armor a player wears and their stored sets. Everything that decides
- * where a piece ends up lives here, apart from Bukkit's {@code Player}, so the dupe-safety invariant in
- * {@link WardrobeData} can be tested directly: after any of these, each piece is either worn or stored,
- * never both and never neither.
- *
- * <p>Each move mutates {@code data} and the {@link Body} together, and reports which slots changed so
- * the caller can persist them as one write.
+ * The three moves between the armor a player wears and their stored sets, kept apart from Bukkit so the
+ * dupe-safety invariant in {@link WardrobeData} can be tested: after any move each piece is either worn
+ * or stored, never both and never neither. Each move reports which slots changed so the caller can
+ * persist them as one write.
  */
 public final class WardrobeActions {
 
@@ -19,15 +16,15 @@ public final class WardrobeActions {
     /** The player's armor slots and inventory, as the moves need them. */
     public interface Body {
 
-        /** What the player is wearing now, helmet to boots. */
+        /** Helmet to boots. */
         ArmorSet worn();
 
-        /** Put these pieces on (nulls clear a slot). */
+        /** Nulls clear a slot. */
         void wear(ItemStack[] pieces);
 
         /**
-         * Move every worn piece into the inventory and leave the armor slots empty — or, if they
-         * won't all fit, change nothing and return false.
+         * Move every worn piece into the inventory and leave the armor slots empty, or, if they won't
+         * all fit, change nothing and return false.
          */
         boolean stowWorn();
     }
@@ -40,7 +37,6 @@ public final class WardrobeActions {
         NO_ARMOR,
         /** A saved set is already worn; it must be unequipped before storing a new one. */
         ALREADY_ACTIVE,
-        /** Nothing to do. */
         NONE;
 
         public boolean succeeded() {
@@ -62,7 +58,7 @@ public final class WardrobeActions {
         int[] changed;
 
         if (active != -1) {
-            data.setSet(active, worn);           // the set you were wearing goes back to its column
+            data.setSet(active, worn);
             data.setActiveIndex(-1);
             changed = new int[]{active, target};
         } else {
@@ -73,7 +69,7 @@ public final class WardrobeActions {
         }
 
         body.wear(data.set(target).pieces());
-        data.setSet(target, ArmorSet.empty());   // items are on the player now
+        data.setSet(target, ArmorSet.empty());   // items are on the player now, so storage holds nothing
         data.setActiveIndex(target);
         if (data.firstWorn(target) <= 0) {
             data.setFirstWorn(target, now);
@@ -89,7 +85,7 @@ public final class WardrobeActions {
         if (body.worn().isEmpty()) {
             return new Result(Outcome.NO_ARMOR);
         }
-        data.setActiveIndex(target);             // your worn armor becomes this (active) set
+        data.setActiveIndex(target);
         data.setFirstWorn(target, now);
         data.setSet(target, ArmorSet.empty());
         return new Result(Outcome.STORED, target);
@@ -101,7 +97,7 @@ public final class WardrobeActions {
         if (active == -1) {
             return new Result(Outcome.NONE);
         }
-        data.setSet(active, body.worn());        // worn armor goes back into its column
+        data.setSet(active, body.worn());
         data.setActiveIndex(-1);
         body.wear(new ItemStack[ArmorSet.SIZE]);
         return new Result(Outcome.UNEQUIPPED, active);

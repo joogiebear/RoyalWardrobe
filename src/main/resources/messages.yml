@@ -1,19 +1,14 @@
 # RoyalWardrobe - player-facing text.
 #
 # Every message is optional: delete a line and its built-in wording is used instead. Empty a message
-# ("") to silence it entirely. Colour codes use '&'.
-#
-# These used to live under 'messages:' in config.yml. If you had reworded any there, they were copied
-# here automatically on first start and the old section is no longer read.
+# ("") to silence it. Colour codes use '&'.
 
 prefix: "&6Wardrobe &8» &r"
 
-# ---- success ----
 equipped: "&aEquipped that setup."
 stored: "&aStored your current setup."
 unequipped: "&aUnequipped your setup."
 
-# ---- refusals ----
 no-armor: "&cYou aren't wearing any armor to store."
 already-active: "&cYou're already wearing a saved setup — unequip it first."
 slot-locked: "&cThat wardrobe slot is locked. Unlock more with a rank or perk."
@@ -22,19 +17,16 @@ inventory-full: "&cMake room in your inventory first."
 no-profile: "&cJoin or create a profile before using your wardrobe."
 slot-corrupt: "&cThat wardrobe slot is damaged and can't be used — tell an admin."
 
-# Shown when a wardrobe write fails. Worth keeping loud: it means the set on screen is not what is
-# stored, and continuing to move gear around can lose it.
+# Shown when a wardrobe write fails: the set on screen is not what is stored.
 save-failed: "&cYour wardrobe could not be saved — tell an admin before changing more sets."
 # The wardrobe stays locked while a failed write is retried, and unlocks once it saves.
 save-pending: "&cYour last wardrobe change isn't saved yet. The wardrobe stays locked until it is."
 save-recovered: "&aYour wardrobe has been saved and can be used again."
 
-# Shown when the wardrobe can't be read (database down, for instance). The menu stays shut rather than
-# showing empty slots, because storing into one would overwrite the set that is really there.
+# Shown when the wardrobe can't be read (database down, for instance).
 load-failed: "&cYour wardrobe couldn't be loaded right now. Try again shortly."
 
-# The text-input dialog used to name a setup. In a prompt the first line is the dialog title and any
-# further lines are shown under it.
+# The dialog used to name a setup. The first prompt line is the title; any others show under it.
 input:
   confirm: "&aDone"
   cancel: "&cCancel"

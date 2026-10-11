@@ -5,10 +5,8 @@ import org.bukkit.inventory.ItemStack;
 import java.util.Arrays;
 
 /**
- * One stored armor loadout: exactly four pieces in fixed order — helmet, chestplate, leggings, boots.
- * Any slot may be {@code null} (a partial set). Items are real {@link ItemStack}s with their full NBT
- * (so EcoArmor stats survive a round-trip), never copies — the wardrobe moves gear, it never clones it,
- * so there is no way to duplicate a stat item.
+ * One stored armor loadout: helmet, chestplate, leggings, boots, any of which may be {@code null}.
+ * The wardrobe moves these items, it never clones them, so a stat item can't be duplicated.
  */
 public final class ArmorSet {
 
@@ -32,9 +30,8 @@ public final class ArmorSet {
     }
 
     /**
-     * A detached deep copy. Persistence must snapshot on the main thread before handing a set to the
-     * writer — serializing the live array while the player keeps clicking would capture a half-applied
-     * state, or a state that never existed.
+     * A detached deep copy. Take it on the main thread before handing a set to the writer; serializing
+     * the live array while the player keeps clicking can capture a half-applied state.
      */
     public ArmorSet snapshot() {
         ItemStack[] copy = new ItemStack[SIZE];
@@ -44,7 +41,7 @@ public final class ArmorSet {
         return new ArmorSet(copy);
     }
 
-    /** The backing array (length 4, nulls allowed). Mutating it mutates the set — intended for swaps. */
+    /** The backing array (length 4, nulls allowed). Mutating it mutates the set, which swaps rely on. */
     public ItemStack[] pieces() {
         return pieces;
     }

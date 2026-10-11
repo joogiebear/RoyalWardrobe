@@ -9,10 +9,8 @@ import java.io.ByteArrayOutputStream;
 import java.util.Base64;
 
 /**
- * Serializes an {@link ArmorSet}'s four pieces to a Base64 string and back, using Bukkit's object
- * stream so slot positions, empty slots and full item NBT (eco stats, enchants) round-trip exactly —
- * the same mechanism RoyalSkyblock uses for profile inventories. Base64 text stores identically under
- * SQLite and MySQL, so there is no dialect-specific BLOB handling.
+ * Serializes an {@link ArmorSet}'s four pieces to Base64 and back with Bukkit's object stream, so empty
+ * slots and full item NBT round-trip exactly. Base64 text stores the same under SQLite and MySQL.
  */
 public final class ItemCodec {
 

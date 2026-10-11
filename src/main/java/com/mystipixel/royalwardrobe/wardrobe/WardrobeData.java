@@ -1,16 +1,12 @@
 package com.mystipixel.royalwardrobe.wardrobe;
 
 /**
- * A player's whole wardrobe for one scope: the stored sets (by column index), the date each set was
- * first worn (epoch millis, 0 = never), and which column is currently <em>active</em> (the set the
- * player is wearing) or -1 for none.
+ * A player's wardrobe for one scope. {@code firstWorn} is epoch millis (0 = never); the active index is
+ * -1 for none.
  *
- * <p><b>Dupe-safety invariant:</b> the active set's real items live on the player, not in
- * {@code sets[activeIndex]} — that entry is empty in storage. Every item therefore exists in exactly
- * one place (on the player if active, in storage otherwise), so a set can never be duplicated.
- *
- * <p>A <em>corrupt</em> slot is one whose stored row exists but could not be decoded. It is shown as
- * unusable and never written to, so the row survives untouched for an admin to recover.
+ * <p>Dupe-safety invariant: the active set's items live on the player and {@code sets[activeIndex]} is
+ * empty in storage, so every item exists in exactly one place. A corrupt slot (row present but not
+ * decodable) is never written to, so the row survives for an admin to recover.
  */
 public final class WardrobeData {
 
@@ -65,7 +61,7 @@ public final class WardrobeData {
         this.activeIndex = index;
     }
 
-    /** Whether this slot's stored row failed to decode — it must be neither shown as empty nor saved over. */
+    /** Whether this slot's stored row failed to decode. It must be neither shown as empty nor saved over. */
     public boolean isCorrupt(int index) {
         return corrupt[index];
     }

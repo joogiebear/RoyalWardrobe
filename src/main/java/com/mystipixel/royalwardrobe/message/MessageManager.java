@@ -36,13 +36,7 @@ public final class MessageManager {
         this.messages = YamlConfiguration.loadConfiguration(new File(plugin.getDataFolder(), "messages.yml"));
     }
 
-    /**
-     * Carry a server's existing wording across when messages move out of {@code config.yml}.
-     *
-     * <p>These used to live under {@code messages:} in the main config. Writing a fresh messages.yml over
-     * the top would silently revert anyone who had reworded them, so on the first run any keys still in
-     * config.yml are copied into the new file and the old section is left in place, ignored and harmless.
-     */
+    // copies a reworded legacy 'messages:' section from config.yml into a fresh messages.yml so it isn't reverted
     private void migrateFromConfig(File file) {
         ConfigurationSection old = plugin.getConfig().getConfigurationSection("messages");
         if (old == null) {
@@ -65,7 +59,7 @@ public final class MessageManager {
             }
         } catch (IOException e) {
             plugin.getLogger().log(Level.WARNING, "Could not migrate messages from config.yml into"
-                    + " messages.yml — the defaults will be used until you edit messages.yml.", e);
+                    + " messages.yml; the defaults will be used until you edit messages.yml.", e);
         }
     }
 

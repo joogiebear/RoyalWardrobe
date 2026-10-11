@@ -13,15 +13,12 @@ import org.bstats.charts.SimplePie;
 import org.bukkit.plugin.java.JavaPlugin;
 
 /**
- * RoyalWardrobe — a Hypixel-style armor wardrobe. Store gear sets and swap between them from a GUI.
- *
- * <p>Standalone, but scopes each player's wardrobe per RoyalSkyblock profile when that plugin +
- * PlaceholderAPI are present (see {@link ScopeResolver}), falling back to one wardrobe per player.
- * Real gear is moved, never copied, so there is no way to duplicate a stat item.
+ * RoyalWardrobe: store armor sets and swap between them from a GUI. Scoped per RoyalSkyblock profile
+ * when PlaceholderAPI resolves one (see {@link ScopeResolver}), otherwise one wardrobe per player.
  */
 public final class RoyalWardrobePlugin extends JavaPlugin {
 
-    /** bStats project id. Identifies the plugin, not the server, so it is fixed rather than configurable. */
+    // identifies the plugin, not the server, so it isn't configurable
     private static final int BSTATS_PLUGIN_ID = 32731;
 
     private WardrobeStorage storage;
@@ -36,7 +33,7 @@ public final class RoyalWardrobePlugin extends JavaPlugin {
         saveDefaultConfig();
         this.storage = new WardrobeStorage(this);
         if (!storage.connect()) {
-            getLogger().severe("Storage failed to initialise — disabling RoyalWardrobe.");
+            getLogger().severe("Storage failed to initialise, disabling RoyalWardrobe.");
             getServer().getPluginManager().disablePlugin(this);
             return;
         }
@@ -57,9 +54,8 @@ public final class RoyalWardrobePlugin extends JavaPlugin {
         }
 
         setupMetrics();
-        // Expansions register after plugins enable, so per-profile mode can't be decided yet — it is
-        // checked on each open instead.
-        getLogger().info("RoyalWardrobe enabled — capacity " + capacity() + " sets, per-profile when "
+        // expansions register after plugins enable, so per-profile mode is decided on each open instead
+        getLogger().info("RoyalWardrobe enabled: capacity " + capacity() + " sets, per-profile when "
                 + getConfig().getString("wardrobe.scope-placeholder", "") + " is available.");
     }
 
@@ -78,7 +74,7 @@ public final class RoyalWardrobePlugin extends JavaPlugin {
         }
     }
 
-    /** Number of set slots in the wardrobe menu (the mask's content region) — the wardrobe's capacity. */
+    /** Number of set slots in the wardrobe menu (the mask's content region). */
     public int capacity() {
         return menu != null ? menu.capacity() : 0;
     }
@@ -109,12 +105,7 @@ public final class RoyalWardrobePlugin extends JavaPlugin {
         return sessions;
     }
 
-    /**
-     * Anonymous usage reporting via bStats.
-     *
-     * <p>Server owners who want no reporting disable it globally in plugins/bStats/config.yml, which
-     * is the mechanism bStats provides; the id itself is fixed because it names this plugin's project.
-     */
+    // opt out globally in plugins/bStats/config.yml
     private void setupMetrics() {
         Metrics metrics = new Metrics(this, BSTATS_PLUGIN_ID);
         metrics.addCustomChart(new SimplePie("storage_backend",

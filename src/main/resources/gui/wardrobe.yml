@@ -1,28 +1,15 @@
-# ═══════════════════════════════════════════════════════════════════════════════
-#  RoyalWardrobe · Wardrobe menu          (item-spec + sounds style, like the suite)
-# ═══════════════════════════════════════════════════════════════════════════════
-#  Layout is Hypixel-style and fixed at 6 rows:
-#     rows 1-4  → each column is an armor SET (helmet, chestplate, leggings, boots)
-#     row 5     → a control DYE under each column
-#     row 6     → navigation (page arrows + close)
+# RoyalWardrobe menu. The layout is fixed at 6 rows:
+#   rows 1-4: each column is an armor set (helmet, chestplate, leggings, boots)
+#   row 5:    a control dye under each column (store, equip, or unequip the active set)
+#   row 6:    navigation
 #
-#  Control dyes (chosen automatically per column):
-#     GRAY  → empty column   : store the armor you're wearing here
-#     PINK  → a saved set     : click to equip it (swaps with what you're wearing)
-#     LIME  → the active set  : the one you're wearing (locked); click to unequip
-#
-#  You can also drag armor pieces straight into an empty column's slots. Your active
-#  (worn) set's column is locked — you can't edit it here. Gear is MOVED, never copied.
-#
-#  Item syntax (same as the rest of the suite): <material> [hide_attributes] name:"&a..."
-#  Placeholders in dye names/lore: %number% %set_name% %pieces% %first_worn%
-#  (%set_name% is the player-given name from right-click rename, or "Setup #N".)
-# ═══════════════════════════════════════════════════════════════════════════════
+# Item syntax: <material> [hide_attributes] name:"&a..."
+# Placeholders in dye names and lore: %number% %set_name% %pieces% %first_worn%
+# (%set_name% is the name given with right-click rename, or "Setup #N".)
 
 title: "&8Wardrobe &7(%page%/%pages%)"
 
-# 9 columns = 9 sets per page. pages 2 → 18 sets total. Lower columns-per-page to leave
-# side gaps; raise pages for more sets.
+# Sets per page (1-9) and number of pages. 9 x 2 = 18 sets.
 columns-per-page: 9
 pages: 2
 
@@ -30,7 +17,7 @@ pages: 2
 date-format: "MMM d, yyyy"
 never-worn: "&7—"
 
-# ── Sounds ─────────────────────────────────────────────────────────────────────
+# Sound names: BLOCK_CHEST_OPEN style or a namespaced key (minecraft:block.chest.open).
 sounds:
   open:
     enabled: true
@@ -58,7 +45,7 @@ sounds:
     volume: 0.7
     pitch: 1.0
 
-# ── Empty piece slot (background shown where a set has no piece) ─────────────────
+# Shown where a set has no piece.
 empty-slot:
   item: 'light_gray_stained_glass_pane name:" "'
 
@@ -66,12 +53,11 @@ empty-slot:
 locked-slot:
   item: 'red_stained_glass_pane name:"&c&lLocked"'
 
-# A slot whose stored set could not be read back. It is shown as damaged and can't be
-# used, so nothing overwrites the row while an admin recovers it (the console logs which).
+# A slot whose stored set could not be read back. It can't be used until an admin recovers it
+# (the console logs which).
 corrupt-slot:
   item: 'black_stained_glass_pane name:"&4Damaged"'
 
-# ── Control dyes ───────────────────────────────────────────────────────────────
 dye:
   store:
     item: 'gray_dye name:"&7&lStore Current Setup"'
@@ -112,21 +98,12 @@ dye:
       - ""
       - "&eClick to unequip"
 
-# ── Navigation (bottom row) ─────────────────────────────────────────────────────
-# Bottom navigation.
-#
-# Buttons are placed by row/column, both 1-indexed, the same as every other Royal menu. A raw
-# 'slot:' index still works if you prefer it, so older configs keep running.
-#
-# Each button may also carry a 'left-click:' list, which REPLACES its built-in behaviour. Leave it
-# off and Previous/Next page and Close behave as normal.
+# Bottom navigation. Buttons are placed by row/column (1-indexed) or a raw 'slot:' index.
+# A 'left-click:' list replaces a button's built-in behaviour:
 #   left-click:
 #     - id: play_sound
 #       args: {sound: UI_BUTTON_CLICK, volume: 0.7, pitch: 1.2}
 #     - id: close
-#
-# The gear grid above is computed from columns-per-page/pages rather than authored here, because a
-# column is one saved outfit read top to bottom. Everything else is yours to move.
 nav:
   filler: 'gray_stained_glass_pane name:" "'
   previous:
@@ -142,10 +119,10 @@ nav:
     row: 6
     column: 5
 
-# Extra buttons. Anything you add here is drawn after the navigation and can run any of:
-#   close (or close_inventory) · message · player_command · console_command · play_sound
+# Extra buttons, drawn after the navigation. Click ids:
+#   close (or close_inventory), message, player_command, console_command, play_sound
 #
-# Example — a button that sends the player to spawn:
+# Example: a button that sends the player to spawn.
 #
 # buttons:
 #   - item: 'ender_pearl name:"&bSpawn"'
