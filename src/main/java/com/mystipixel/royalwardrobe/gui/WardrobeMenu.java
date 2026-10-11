@@ -148,6 +148,11 @@ public final class WardrobeMenu {
             message(player, "no-profile");
             return;
         }
+        if (plugin.sessions().hasUnsavedWrites(player.getUniqueId(), scope)) {
+            playSound(player, "fail");
+            message(player, "save-pending");
+            return;
+        }
         plugin.sessions().with(player, scope, capacity(), action, () -> {
             playSound(player, "fail");
             message(player, "load-failed");
@@ -856,8 +861,7 @@ public final class WardrobeMenu {
         String scope = holder.scope();
         List<WardrobeStorage.SlotWrite> writes = new ArrayList<>(indexes.length);
         for (int index : indexes) {
-            writes.add(new WardrobeStorage.SlotWrite(index, data.set(index).snapshot(), data.firstWorn(index),
-                    data.activeIndex() == index, data.name(index)));
+            writes.add(WardrobeStorage.SlotWrite.of(data, index));
         }
         plugin.storage().submit(() -> {
             boolean saved = plugin.storage().saveAll(owner, scope, writes);
@@ -865,6 +869,9 @@ public final class WardrobeMenu {
                 return;                          // drained on disable: committed, nobody left to tell
             }
             plugin.getServer().getScheduler().runTask(plugin, () -> {
+                if (!saved) {
+                    plugin.sessions().writeFailed(owner, scope, data, indexes);
+                }
                 Player online = plugin.getServer().getPlayer(owner);
                 if (online == null) {
                     return;
@@ -995,6 +1002,8 @@ public final class WardrobeMenu {
             Map.entry("slot-locked", "&cThat wardrobe slot is locked. Unlock more with a rank or perk."),
             Map.entry("inventory-full", "&cMake room in your inventory first."),
             Map.entry("save-failed", "&cYour wardrobe could not be saved — tell an admin before changing more sets."),
+            Map.entry("save-pending", "&cYour last wardrobe change isn't saved yet. The wardrobe stays locked until it is."),
+            Map.entry("save-recovered", "&aYour wardrobe has been saved and can be used again."),
             Map.entry("renamed", "&aSetup renamed."),
             Map.entry("nothing-to-rename", "&cStore a setup there first, then name it."),
             Map.entry("no-such-slot", "&cNo wardrobe slot with that number."),
@@ -1003,6 +1012,10 @@ public final class WardrobeMenu {
             Map.entry("no-profile", "&cJoin or create a profile before using your wardrobe."),
             Map.entry("load-failed", "&cYour wardrobe couldn't be loaded right now. Try again shortly."),
             Map.entry("slot-corrupt", "&cThat wardrobe slot is damaged and can't be used — tell an admin."));
+
+    void notifySaved(Player player) {
+        message(player, "save-recovered");
+    }
 
     private void message(Player player, String key) {
         plugin.messages().send(player, key, DEFAULT_MESSAGES.getOrDefault(key, ""));

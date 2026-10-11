@@ -227,6 +227,12 @@ public final class WardrobeStorage {
 
     /** One slot's full state, as {@link #saveAll} writes it. */
     public record SlotWrite(int idx, ArmorSet set, long firstWorn, boolean active, String name) {
+
+        // snapshots item stacks, so call it on the main thread
+        public static SlotWrite of(WardrobeData data, int index) {
+            return new SlotWrite(index, data.set(index).snapshot(), data.firstWorn(index),
+                    data.activeIndex() == index, data.name(index));
+        }
     }
 
     /**

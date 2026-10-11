@@ -25,6 +25,9 @@ slot-corrupt: "&cThat wardrobe slot is damaged and can't be used — tell an adm
 # Shown when a wardrobe write fails. Worth keeping loud: it means the set on screen is not what is
 # stored, and continuing to move gear around can lose it.
 save-failed: "&cYour wardrobe could not be saved — tell an admin before changing more sets."
+# The wardrobe stays locked while a failed write is retried, and unlocks once it saves.
+save-pending: "&cYour last wardrobe change isn't saved yet. The wardrobe stays locked until it is."
+save-recovered: "&aYour wardrobe has been saved and can be used again."
 
 # Shown when the wardrobe can't be read (database down, for instance). The menu stays shut rather than
 # showing empty slots, because storing into one would overwrite the set that is really there.

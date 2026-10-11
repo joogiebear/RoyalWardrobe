@@ -1,6 +1,7 @@
 package com.mystipixel.royalwardrobe.gui;
 
 import com.mystipixel.royalwardrobe.RoyalWardrobePlugin;
+import com.mystipixel.royalwardrobe.storage.FailedWrites;
 import com.mystipixel.royalwardrobe.wardrobe.WardrobeData;
 import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
@@ -9,10 +10,13 @@ import org.bukkit.event.player.PlayerQuitEvent;
 
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 import java.util.function.Consumer;
+import java.util.logging.Level;
 
 /**
  * The one live copy of each online player's wardrobe.
@@ -44,9 +48,14 @@ public final class WardrobeSessions implements Listener {
         }
     }
 
+    private static final long RETRY_FIRST_TICKS = 100L;
+    private static final long RETRY_MAX_TICKS = 1200L;
+
     private final RoyalWardrobePlugin plugin;
     private final Map<UUID, Session> live = new HashMap<>();
     private final Map<UUID, PendingLoad> loading = new HashMap<>();
+    private final FailedWrites failedWrites = new FailedWrites();
+    private final Set<FailedWrites.Key> retrying = new HashSet<>();
 
     public WardrobeSessions(RoyalWardrobePlugin plugin) {
         this.plugin = plugin;
@@ -127,6 +136,74 @@ public final class WardrobeSessions implements Listener {
         if (player.getOpenInventory().getTopInventory().getHolder() instanceof WardrobeHolder holder
                 && holder.data() == data) {
             player.closeInventory();
+        }
+    }
+
+    /** Whether a failed write for this wardrobe is still being retried; it must not be loaded or changed until then. */
+    public boolean hasUnsavedWrites(UUID owner, String scope) {
+        return failedWrites.isPending(new FailedWrites.Key(owner, scope));
+    }
+
+    /**
+     * Record slots whose write failed and keep rewriting them from {@code data} until one commits.
+     * The player's gear already matches {@code data}, so the table is rolled forward, not the player back.
+     */
+    public void writeFailed(UUID owner, String scope, WardrobeData data, int... indexes) {
+        FailedWrites.Key key = failedWrites.failed(owner, scope, data, indexes);
+        Player player = plugin.getServer().getPlayer(owner);
+        if (player != null) {
+            closeMenuFor(player, data);
+        }
+        scheduleRetry(key);
+    }
+
+    private void scheduleRetry(FailedWrites.Key key) {
+        if (!retrying.add(key)) {
+            return;                              // the retry in flight reschedules itself if still needed
+        }
+        int doublings = Math.min(failedWrites.failures(key) - 1, 4);
+        long delay = Math.min(RETRY_MAX_TICKS, RETRY_FIRST_TICKS << doublings);
+        plugin.getServer().getScheduler().runTaskLater(plugin, () -> retry(key), delay);
+    }
+
+    private void retry(FailedWrites.Key key) {
+        FailedWrites.Retry retry = failedWrites.retry(key);
+        plugin.storage().submit(() -> {
+            boolean saved = plugin.storage().saveAll(key.owner(), key.scope(), retry.writes());
+            if (!plugin.isEnabled()) {
+                return;
+            }
+            plugin.getServer().getScheduler().runTask(plugin, () -> {
+                retrying.remove(key);
+                if (saved) {
+                    failedWrites.saved(retry);
+                } else {
+                    failedWrites.retryFailed(retry);
+                }
+                if (failedWrites.isPending(key)) {
+                    scheduleRetry(key);
+                    return;
+                }
+                plugin.getLogger().info("Saved wardrobe " + key.owner() + "/" + key.scope() + " after an earlier failed write.");
+                Player player = plugin.getServer().getPlayer(key.owner());
+                if (player != null) {
+                    plugin.menu().notifySaved(player);
+                }
+            });
+        });
+    }
+
+    /** Queue one last write of every wardrobe still behind its player. Call on disable, before storage drains. */
+    public void flushFailedWrites() {
+        for (FailedWrites.Key key : failedWrites.keys()) {
+            FailedWrites.Retry retry = failedWrites.retry(key);
+            plugin.storage().submit(() -> {
+                if (!plugin.storage().saveAll(key.owner(), key.scope(), retry.writes())) {
+                    plugin.getLogger().log(Level.SEVERE, "Wardrobe " + key.owner() + "/" + key.scope()
+                            + " was never saved: the table is behind the player's gear for slots "
+                            + retry.writes().stream().map(w -> String.valueOf(w.idx() + 1)).toList() + ".");
+                }
+            });
         }
     }
 

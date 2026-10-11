@@ -1,18 +1,23 @@
 package com.mystipixel.royalwardrobe.wardrobe;
 
+import com.mystipixel.royalwardrobe.storage.FailedWrites;
+import com.mystipixel.royalwardrobe.storage.WardrobeStorage;
 import org.bukkit.Material;
 import org.bukkit.inventory.ItemStack;
 import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertArrayEquals;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -59,6 +64,7 @@ class WardrobeActionsTest {
     private static ItemStack piece(Material material) {
         ItemStack item = mock(ItemStack.class);
         when(item.getType()).thenReturn(material);
+        when(item.clone()).thenReturn(item);     // keep identity through snapshots, so pieces can be counted
         return item;
     }
 
@@ -256,5 +262,94 @@ class WardrobeActionsTest {
         assertEachExactlyOnce(data, body, iron, gold, diamond);
         assertSame(gold[0], body.worn[0]);
         assertNull(data.set(1).piece(0));
+    }
+
+    // the wardrobe table: slot index to the last committed write
+    private static final class FakeTable {
+        final Map<Integer, WardrobeStorage.SlotWrite> rows = new HashMap<>();
+
+        void commit(List<WardrobeStorage.SlotWrite> writes) {
+            writes.forEach(w -> rows.put(w.idx(), w));
+        }
+
+        WardrobeData load(int capacity) {
+            WardrobeData data = wardrobe(capacity);
+            rows.values().forEach(w -> {
+                if (w.active()) {
+                    data.setActiveIndex(w.idx());
+                } else {
+                    data.setSet(w.idx(), w.set());
+                }
+            });
+            return data;
+        }
+    }
+
+    @Test
+    void aFailedEquipWriteIsRetriedFromTheLiveCopySoAReloadNeverDupes() {
+        UUID owner = UUID.randomUUID();
+        ItemStack[] diamond = fullSet("DIAMOND");
+        FakeTable table = new FakeTable();
+        WardrobeData live = wardrobe(4);
+        live.setSet(2, new ArmorSet(diamond));
+        table.commit(List.of(WardrobeStorage.SlotWrite.of(live, 2)));
+        FakeBody body = new FakeBody();
+
+        WardrobeActions.Result result = WardrobeActions.equip(live, body, 2, NOW);
+        FailedWrites failed = new FailedWrites();
+        FailedWrites.Key key = failed.failed(owner, "global", live, result.changed());   // the write never reached the table
+
+        assertTrue(failed.isPending(key), "the wardrobe must stay locked while the table is behind");
+        assertEachExactlyOnce(live, body, diamond);
+
+        FailedWrites.Retry first = failed.retry(key);
+        failed.retryFailed(first);
+        assertTrue(failed.isPending(key), "a failed retry keeps it pending");
+
+        FailedWrites.Retry second = failed.retry(key);
+        table.commit(second.writes());
+        failed.saved(second);
+        assertFalse(failed.isPending(key));
+
+        WardrobeData reloaded = table.load(4);
+        assertEquals(2, reloaded.activeIndex());
+        assertEachExactlyOnce(reloaded, body, diamond);
+    }
+
+    @Test
+    void aFailedUnequipWriteIsRetriedSoAReloadNeverLosesTheSet() {
+        UUID owner = UUID.randomUUID();
+        ItemStack[] iron = fullSet("IRON");
+        FakeTable table = new FakeTable();
+        WardrobeData live = wardrobe(4);
+        FakeBody body = new FakeBody();
+        body.worn = iron.clone();
+        live.setActiveIndex(1);
+        table.commit(List.of(WardrobeStorage.SlotWrite.of(live, 1)));
+
+        WardrobeActions.Result result = WardrobeActions.unequip(live, body);
+        FailedWrites failed = new FailedWrites();
+        FailedWrites.Key key = failed.failed(owner, "global", live, result.changed());
+
+        FailedWrites.Retry retry = failed.retry(key);
+        table.commit(retry.writes());
+        failed.saved(retry);
+
+        assertEachExactlyOnce(table.load(4), body, iron);
+    }
+
+    @Test
+    void aFailureReportedAfterARetryWasTakenKeepsTheWardrobeLocked() {
+        UUID owner = UUID.randomUUID();
+        WardrobeData live = wardrobe(4);
+        FailedWrites failed = new FailedWrites();
+        FailedWrites.Key key = failed.failed(owner, "global", live, 0);
+
+        FailedWrites.Retry retry = failed.retry(key);
+        failed.failed(owner, "global", live, 3);   // a later write, queued before the retry ran, also failed
+        failed.saved(retry);
+
+        assertTrue(failed.isPending(key));
+        assertEquals(List.of(0, 3), failed.retry(key).writes().stream().map(WardrobeStorage.SlotWrite::idx).toList());
     }
 }
