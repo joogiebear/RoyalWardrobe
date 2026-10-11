@@ -32,3 +32,12 @@ save-recovered: "&aYour wardrobe has been saved and can be used again."
 # Shown when the wardrobe can't be read (database down, for instance). The menu stays shut rather than
 # showing empty slots, because storing into one would overwrite the set that is really there.
 load-failed: "&cYour wardrobe couldn't be loaded right now. Try again shortly."
+
+# The text-input dialog used to name a setup. In a prompt the first line is the dialog title and any
+# further lines are shown under it.
+input:
+  confirm: "&aDone"
+  cancel: "&cCancel"
+  rename:
+    - "&fName this setup"
+    - "&7Leave it blank to cancel."

@@ -12,6 +12,7 @@ import io.papermc.paper.datacomponent.item.Equippable;
 import org.bukkit.configuration.file.FileConfiguration;
 import org.bukkit.configuration.file.YamlConfiguration;
 import org.bukkit.entity.Player;
+import org.bukkit.event.inventory.InventoryType;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.permissions.PermissionAttachmentInfo;
@@ -47,7 +48,7 @@ public final class WardrobeMenu {
     private static final int NAV_ROW = 5;      // bottom navigation row
 
     private final RoyalWardrobePlugin plugin;
-    private final SignInput signInput;
+    private final TextInput textInput;
     private FileConfiguration gui;
     private int columns;
     private int pages;
@@ -57,9 +58,9 @@ public final class WardrobeMenu {
     private int nextSlot;
     private int closeSlot;
 
-    public WardrobeMenu(RoyalWardrobePlugin plugin, SignInput signInput) {
+    public WardrobeMenu(RoyalWardrobePlugin plugin, TextInput textInput) {
         this.plugin = plugin;
-        this.signInput = signInput;
+        this.textInput = textInput;
         reload();
     }
 
@@ -607,7 +608,7 @@ public final class WardrobeMenu {
     }
 
     /**
-     * Right-click on a set's dye: name the set on a sign. Names are what turn "Setup #3" into
+     * Right-click on a set's dye: name the set in a dialog. Names are what turn "Setup #3" into
      * "PvP" once a player owns more than a couple of sets. Renaming the active set is allowed —
      * a name is metadata about the column, not about where its items currently live.
      */
@@ -618,13 +619,14 @@ public final class WardrobeMenu {
             message(player, "nothing-to-rename");
             return;
         }
-        signInput.request(player,
-                List.of("&8^^^^^^^^^^^^^^^", "&8Name this setup", "&8(blank to cancel)"),
+        List<String> title = plugin.messages().lines("input.rename",
+                List.of("&fName this setup", "&7Leave it blank to cancel."));
+        textInput.request(player, title,
                 typed -> {
-                    if (!player.isOnline()) {
+                    if (!player.isOnline() || (typed == null && !canReopen(player))) {
                         return;
                     }
-                    // The menu was closed for the sign, so the wardrobe may have changed meanwhile
+                    // The menu was closed for the dialog, so the wardrobe may have changed meanwhile
                     // (a command, a profile switch). Only name it if this is still the live copy, and
                     // reopen on whatever is live now rather than on the copy captured before.
                     boolean named = false;
@@ -645,6 +647,15 @@ public final class WardrobeMenu {
                         }
                     });
                 });
+    }
+
+    // after a null answer the player may have died, opened another menu or started a newer prompt
+    private boolean canReopen(Player player) {
+        if (player.isDead() || textInput.isWaiting(player)) {
+            return false;
+        }
+        InventoryType top = player.getOpenInventory().getTopInventory().getType();
+        return top == InventoryType.CRAFTING || top == InventoryType.CREATIVE;
     }
 
     /** Colour and format codes: legacy (&a, &k, §l) and hex (&#rrggbb). */
