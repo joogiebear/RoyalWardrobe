@@ -9,6 +9,7 @@ import org.bukkit.plugin.java.JavaPlugin;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.List;
 import java.util.Map;
 import java.util.logging.Level;
 
@@ -75,6 +76,12 @@ public final class MessageManager {
     /** The raw message for {@code key}, or {@code fallback} when it isn't in the file. */
     public String get(String key, String fallback) {
         return messages.getString(key, fallback);
+    }
+
+    /** The lines under {@code key}, or {@code fallback} when it isn't in the file. */
+    public List<String> lines(String key, List<String> fallback) {
+        List<String> value = messages.getStringList(key);
+        return value.isEmpty() ? fallback : value;
     }
 
     /** Send a prefixed message. Blank text is skipped, so a message can be silenced by emptying it. */

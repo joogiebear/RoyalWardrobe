@@ -22,7 +22,7 @@ import java.util.logging.Level;
  * The one live copy of each online player's wardrobe.
  *
  * <p>Every way in — the menu, {@code /wardrobe equip}, {@code /wardrobe list}, a rename returning from
- * its sign — works on the same {@link WardrobeData}. When each of them loaded a private copy instead,
+ * its dialog — works on the same {@link WardrobeData}. When each of them loaded a private copy instead,
  * a copy read before another path's change was queued would still show a set as stored after it had
  * been equipped, and its pieces could be taken a second time. With one copy there is nothing to go
  * stale: the database is read once per player and scope, and only written after that.
