@@ -2,7 +2,8 @@
 # The menu layout, icons and sounds are in gui/wardrobe.yml. Reload both with /wardrobe reload.
 
 storage:
-  # SQLITE (no setup, single server) or MYSQL (fill in the block below; use it for a network).
+  # SQLITE (no setup) or MYSQL (fill in the block below). Each server needs its own database for now:
+  # sharing one between servers is planned but not safe yet, because servers can overwrite each other's data.
   # Storage settings apply on restart.
   type: SQLITE
   sqlite-file: "wardrobe.db"
