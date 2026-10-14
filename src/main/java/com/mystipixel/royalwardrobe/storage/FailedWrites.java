@@ -61,6 +61,15 @@ public final class FailedWrites {
         }
     }
 
+    /** Drop a wardrobe's pending slots without writing them, e.g. when another server owns newer data. */
+    public void discard(Key key) {
+        entries.remove(key);
+    }
+
+    public boolean hasOwner(UUID owner) {
+        return entries.keySet().stream().anyMatch(key -> key.owner().equals(owner));
+    }
+
     public boolean isPending(Key key) {
         return entries.containsKey(key);
     }

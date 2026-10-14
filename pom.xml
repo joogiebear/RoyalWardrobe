@@ -26,6 +26,10 @@
             <id>placeholderapi</id>
             <url>https://repo.extendedclip.com/content/repositories/placeholderapi/</url>
         </repository>
+        <repository>
+            <id>royal-common</id>
+            <url>https://raw.githubusercontent.com/joogiebear/royal-common/maven</url>
+        </repository>
     </repositories>
 
     <dependencies>
@@ -63,6 +67,11 @@
             <scope>provided</scope>
         </dependency>
         <!-- bStats is shaded (relocated) into the jar; it is not a library-loader artifact. -->
+        <dependency>
+            <groupId>com.github.joogiebear</groupId>
+            <artifactId>royal-common</artifactId>
+            <version>2026.42.0</version>
+        </dependency>
         <dependency>
             <groupId>org.bstats</groupId>
             <artifactId>bstats-bukkit</artifactId>
@@ -128,6 +137,10 @@
                                 <relocation>
                                     <pattern>org.bstats</pattern>
                                     <shadedPattern>com.mystipixel.royalwardrobe.libs.bstats</shadedPattern>
+                                </relocation>
+                                <relocation>
+                                    <pattern>com.mystipixel.royalcommon</pattern>
+                                    <shadedPattern>com.mystipixel.royalwardrobe.libs.royalcommon</shadedPattern>
                                 </relocation>
                             </relocations>
                         </configuration>

@@ -77,6 +77,7 @@ can exceed the menu's own capacity.
 storage:
   type: SQLITE            # or MYSQL
   sqlite-file: wardrobe.db
+  server-id: ""           # this server's name when sharing a MySQL database; empty generates one
   mysql:
     host: localhost
     port: 3306
@@ -143,6 +144,27 @@ slot, because a column *is* one outfit read helmet to boots — those positions 
 One row per wardrobe slot. Writes go through a single writer thread so two rapid clicks on the same
 slot can't land out of order, and a failed write tells the player rather than failing silently. On
 shutdown the queue is drained before the pool closes.
+
+### Several servers, one wardrobe
+
+Point every server at the same MySQL/MariaDB database and a player's wardrobe follows them from server
+to server.
+
+- **The servers must share player inventories too.** The set a player is wearing lives on the player,
+  not in the wardrobe table. Without an inventory sync, a player who wears a set on one server arrives
+  on the next with that slot marked worn and no armor on them.
+- **A wardrobe opens only after the last server saved it.** The server a player left marks their
+  wardrobe saved once its last write commits. The next server waits up to five seconds for that before
+  opening it; if it is still not saved, the player sees `load-busy` and can try again. A server that
+  crashed stops counting after a minute, and its players' wardrobes open elsewhere.
+- **No server writes over another's newer copy.** Every wardrobe has a version that each save raises.
+  A save only lands if the version is still the one this server loaded, so a stale copy can't undo a
+  change made elsewhere. The refused change is logged in full (severe level) and the player sees
+  `changed-elsewhere`; opening the wardrobe again shows the current sets.
+- **Servers starting together upgrade the database once.** The schema has a version, and the first
+  server to start migrates it while the others wait.
+- **Give each server its own `server-id`**, or leave it empty and each server keeps a generated one in
+  `server-id.txt`. Copying that file to another server makes them look like one server.
 
 ## Metrics
 

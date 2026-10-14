@@ -33,6 +33,10 @@ save-recovered: "&aYour wardrobe has been saved and can be used again."
 
 # Shown when the wardrobe can't be read (database down, for instance).
 load-failed: "&cYour wardrobe couldn't be loaded right now. Try again shortly."
+# Servers sharing one database: the server the player came from hasn't finished saving their wardrobe.
+load-busy: "&eYour wardrobe is still being saved on another server. Try again in a moment."
+# Servers sharing one database: another server changed this wardrobe, so the change here wasn't saved over it.
+changed-elsewhere: "&cYour wardrobe was changed on another server, so that change wasn't saved. Open it again to see the current sets."
 
 # The dialog used to name a setup. The first prompt line is the title; any others show under it.
 input:

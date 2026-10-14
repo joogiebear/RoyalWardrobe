@@ -138,9 +138,13 @@ public final class WardrobeMenu {
             message(player, "save-pending");
             return;
         }
-        plugin.sessions().with(player, scope, capacity(), action, () -> {
+        plugin.sessions().with(player, scope, capacity(), action, failure -> {
             playSound(player, "fail");
-            message(player, "load-failed");
+            if (failure == WardrobeSessions.LoadFailure.BUSY) {
+                message(player, "load-busy");
+            } else {
+                message(player, "load-failed");
+            }
         });
     }
 
@@ -796,11 +800,17 @@ public final class WardrobeMenu {
             writes.add(WardrobeStorage.SlotWrite.of(data, index));
         }
         plugin.storage().submit(() -> {
-            boolean saved = plugin.storage().saveAll(owner, scope, writes);
+            WardrobeStorage.SaveResult result = plugin.storage().saveAll(owner, scope, writes);
             if (!plugin.isEnabled()) {
                 return;                          // drained on disable: nobody left to tell
             }
             plugin.getServer().getScheduler().runTask(plugin, () -> {
+                if (result == WardrobeStorage.SaveResult.CONFLICT) {
+                    // retrying would write over another server's newer copy; storage logged what was refused
+                    plugin.sessions().changedElsewhere(owner, data);
+                    return;
+                }
+                boolean saved = result == WardrobeStorage.SaveResult.SAVED;
                 if (!saved) {
                     plugin.sessions().writeFailed(owner, scope, data, indexes);
                 }
@@ -918,6 +928,11 @@ public final class WardrobeMenu {
 
     void notifySaved(Player player) {
         message(player, "save-recovered");
+    }
+
+    void notifyChangedElsewhere(Player player) {
+        playSound(player, "fail");
+        message(player, "changed-elsewhere");
     }
 
     private void message(Player player, String key) {
