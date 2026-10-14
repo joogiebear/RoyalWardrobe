@@ -39,6 +39,8 @@ public final class WardrobeSessions implements Listener {
         private final int capacity;
         private final List<Consumer<Session>> ready = new ArrayList<>();
         private final List<Consumer<LoadFailure>> failed = new ArrayList<>();
+        // set on quit: a load still waiting must not claim a player this server has already released
+        private volatile boolean cancelled;
 
         private PendingLoad(String scope, int capacity) {
             this.scope = scope;
@@ -96,7 +98,14 @@ public final class WardrobeSessions implements Listener {
                 finishLoad(id, pending, null, claim == WardrobeStorage.Claim.BUSY ? LoadFailure.BUSY : LoadFailure.UNREADABLE);
                 return;
             }
+            if (pending.cancelled || !plugin.isEnabled()) {
+                return;
+            }
             plugin.storage().submit(() -> {
+                // the quit's release is queued behind this check, so a cancelled load never marks them active
+                if (pending.cancelled || !plugin.isEnabled()) {
+                    return;
+                }
                 WardrobeData data = plugin.storage().load(id, pending.scope, pending.capacity);
                 finishLoad(id, pending, data, LoadFailure.UNREADABLE);
             });
@@ -188,6 +197,7 @@ public final class WardrobeSessions implements Listener {
                 if (result == WardrobeStorage.SaveResult.CONFLICT) {
                     // another server owns newer data now; storage logged the refused slots
                     failedWrites.discard(key);
+                    settle(key);
                     Session session = live.get(key.owner());
                     if (session != null && session.scope().equals(key.scope())) {
                         changedElsewhere(key.owner(), session.data());
@@ -204,6 +214,7 @@ public final class WardrobeSessions implements Listener {
                     scheduleRetry(key);
                     return;
                 }
+                settle(key);
                 plugin.getLogger().info("Saved wardrobe " + key.owner() + "/" + key.scope() + " after an earlier failed write.");
                 Player player = plugin.getServer().getPlayer(key.owner());
                 if (player != null) {
@@ -243,25 +254,33 @@ public final class WardrobeSessions implements Listener {
      * wardrobe is fully saved. Call on disable, before storage drains.
      */
     public void flushFailedWrites() {
+        Set<UUID> owners = new HashSet<>();
         for (FailedWrites.Key key : failedWrites.keys()) {
+            owners.add(key.owner());
             FailedWrites.Retry retry = failedWrites.retry(key);
             plugin.storage().submit(() -> {
                 WardrobeStorage.SaveResult result = plugin.storage().saveAll(key.owner(), key.scope(), retry.writes());
-                if (result == WardrobeStorage.SaveResult.SAVED) {
-                    plugin.storage().release(key.owner());
-                } else if (result == WardrobeStorage.SaveResult.FAILED) {
+                if (result == WardrobeStorage.SaveResult.FAILED) {
                     plugin.getLogger().log(Level.SEVERE, "Wardrobe " + key.owner() + "/" + key.scope()
                             + " was never saved: the table is behind the player's gear for slots "
                             + retry.writes().stream().map(w -> String.valueOf(w.idx() + 1)).toList() + ".");
+                } else {
+                    plugin.storage().settled(key.owner(), key.scope());
                 }
             });
         }
         for (Player player : plugin.getServer().getOnlinePlayers()) {
-            UUID id = player.getUniqueId();
-            if (!failedWrites.hasOwner(id)) {
-                plugin.storage().submit(() -> plugin.storage().release(id));
-            }
+            owners.add(player.getUniqueId());
         }
+        // behind every flush: storage keeps back any owner with a write that still failed
+        for (UUID owner : owners) {
+            plugin.storage().submit(() -> plugin.storage().release(owner));
+        }
+    }
+
+    // queued, so it lands on the writer behind the save that settled the key
+    private void settle(FailedWrites.Key key) {
+        plugin.storage().submit(() -> plugin.storage().settled(key.owner(), key.scope()));
     }
 
     /**
@@ -272,7 +291,10 @@ public final class WardrobeSessions implements Listener {
     public void onQuit(PlayerQuitEvent event) {
         UUID id = event.getPlayer().getUniqueId();
         live.remove(id);
-        loading.remove(id);
+        PendingLoad pending = loading.remove(id);
+        if (pending != null) {
+            pending.cancelled = true;
+        }
         if (!failedWrites.hasOwner(id)) {
             plugin.storage().submit(() -> plugin.storage().release(id));
         }

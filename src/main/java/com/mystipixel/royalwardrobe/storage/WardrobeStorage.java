@@ -66,8 +66,11 @@ public final class WardrobeStorage {
     private PlayerHandoff handoff;
     // writer thread only: the version this server last loaded or wrote for each wardrobe
     private final Map<Key, Long> known = new HashMap<>();
-    // writer thread only: wardrobes whose last save failed, so the table is behind the player
+    // writer thread only: wardrobes with a failed write not yet landed, so the table is behind the player.
+    // Cleared by settled(), never by a later save of other slots.
     private final java.util.Set<Key> unsaved = new java.util.HashSet<>();
+    // writer thread only: players who left but whose markSaved failed; retried by tick()
+    private final java.util.Set<UUID> releasing = new java.util.HashSet<>();
 
     // one thread, so saves for the same slot commit in order; shutdown() drains it before closing the pool
     private ExecutorService writer;
@@ -222,19 +225,39 @@ public final class WardrobeStorage {
      */
     public void release(UUID owner) {
         if (unsaved.stream().anyMatch(key -> key.owner().equals(owner))) {
-            return;                              // released by the retry that lands the failed write
+            return;                              // released once the failed write lands or is dropped
         }
+        known.keySet().removeIf(key -> key.owner().equals(owner));
+        releasing.add(owner);
+        markSaved(owner);
+    }
+
+    private void markSaved(UUID owner) {
         try {
             handoff.markSaved(owner);
-            known.keySet().removeIf(key -> key.owner().equals(owner));
+            releasing.remove(owner);
         } catch (SQLException e) {
-            plugin.getLogger().log(Level.WARNING, "Could not mark the wardrobe of " + owner + " as saved; another"
-                    + " server loads it once this one stops answering", e);
+            plugin.getLogger().log(Level.WARNING, "Could not mark the wardrobe of " + owner + " as saved;"
+                    + " retrying every " + heartbeatInterval().toSeconds() + "s", e);
         }
     }
 
-    /** Keeps this server's claims alive. Call on the writer thread every few seconds. */
-    public void heartbeat() {
+    /** A wardrobe's failed write has landed or been dropped; its owner may be released again. Writer thread. */
+    public void settled(UUID owner, String scope) {
+        unsaved.remove(new Key(owner, scope));
+    }
+
+    /**
+     * Retries releases that failed, then keeps this server's claims on its players alive. Call on the
+     * writer thread every {@link #heartbeatInterval()}.
+     */
+    public void tick() {
+        if (dataSource == null || dataSource.isClosed()) {
+            return;
+        }
+        for (UUID owner : java.util.List.copyOf(releasing)) {
+            markSaved(owner);
+        }
         try {
             handoff.heartbeat();
         } catch (SQLException e) {
@@ -322,7 +345,11 @@ public final class WardrobeStorage {
             write.run();                         // fall back to the caller rather than drop the write
             return;
         }
-        writer.execute(write);
+        try {
+            writer.execute(write);
+        } catch (java.util.concurrent.RejectedExecutionException shutDown) {
+            write.run();                         // shut down between the check and here
+        }
     }
 
     /** One slot's full state, as {@link #saveAll} writes it. */
@@ -388,11 +415,9 @@ public final class WardrobeStorage {
                 // SEVERE with the refused contents, so an admin can put the gear back by hand
                 plugin.getLogger().severe("Wardrobe " + owner + "/" + scope + " was changed on another server since"
                         + " it was loaded here; these slots were not saved over it: " + describe(writes));
-                unsaved.remove(key);
                 return SaveResult.CONFLICT;
             }
             known.put(key, saved);
-            unsaved.remove(key);
             return SaveResult.SAVED;
         } catch (Exception e) {
             // SEVERE, not WARNING: a lost wardrobe write means real gear is unaccounted for.

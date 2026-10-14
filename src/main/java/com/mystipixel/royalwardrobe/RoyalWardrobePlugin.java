@@ -54,9 +54,11 @@ public final class RoyalWardrobePlugin extends JavaPlugin {
             getCommand("wardrobe").setTabCompleter(command);
         }
 
-        // keeps this server's claim on its players' wardrobes fresh for servers sharing the database
+        // keeps this server's claim on its players' wardrobes fresh for servers sharing the database, and
+        // retries any release that failed
         long heartbeatTicks = WardrobeStorage.heartbeatInterval().toSeconds() * 20L;
-        this.heartbeatTask = getServer().getScheduler().runTaskTimerAsynchronously(this, storage::heartbeat,
+        this.heartbeatTask = getServer().getScheduler().runTaskTimerAsynchronously(this,
+                () -> storage.submit(storage::tick),
                 heartbeatTicks, heartbeatTicks);
 
         setupMetrics();
