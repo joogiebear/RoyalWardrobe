@@ -54,6 +54,9 @@ public final class WardrobeMenu {
     private int previousSlot;
     private int nextSlot;
     private int closeSlot;
+    // the menu is rebuilt on every click; specs and placeholder-free items are parsed once per reload
+    private final Map<String, ItemSpec> specs = new HashMap<>();
+    private final Map<String, ItemStack> fixedItems = new HashMap<>();
 
     public WardrobeMenu(RoyalWardrobePlugin plugin, TextInput textInput) {
         this.plugin = plugin;
@@ -74,6 +77,8 @@ public final class WardrobeMenu {
         this.nextSlot = navSlot("next", base + 8);
         this.closeSlot = navSlot("close", base + 4);
         this.buttons = parseButtons();
+        specs.clear();
+        fixedItems.clear();
     }
 
     public int capacity() {
@@ -359,8 +364,10 @@ public final class WardrobeMenu {
             inv.setItem(nextSlot, item("nav.next.item", "nav.next.lore", Map.of()));
         }
         inv.setItem(closeSlot, item("nav.close.item", "nav.close.lore", Map.of()));
-        for (Button button : buttons) {
-            inv.setItem(button.index(), ItemSpec.parse(button.spec()).build(Map.of(), button.lore()));
+        for (int i = 0; i < buttons.size(); i++) {
+            Button button = buttons.get(i);
+            inv.setItem(button.index(), fixedItems.computeIfAbsent("button:" + i,
+                    k -> ItemSpec.parse(button.spec()).build(Map.of(), button.lore())).clone());
         }
         player.updateInventory();
     }
@@ -849,9 +856,16 @@ public final class WardrobeMenu {
     }
 
     private ItemStack item(String itemPath, String lorePath, Map<String, String> ph) {
-        String spec = gui.getString(itemPath);
+        if (ph.isEmpty()) {
+            return fixedItems.computeIfAbsent(itemPath + "|" + lorePath, k -> buildItem(itemPath, lorePath, ph)).clone();
+        }
+        return buildItem(itemPath, lorePath, ph);
+    }
+
+    private ItemStack buildItem(String itemPath, String lorePath, Map<String, String> ph) {
+        ItemSpec spec = specs.computeIfAbsent(itemPath, path -> ItemSpec.parse(gui.getString(path)));
         List<String> lore = lorePath == null ? List.of() : gui.getStringList(lorePath);
-        return ItemSpec.parse(spec).build(ph, lore);
+        return spec.build(ph, lore);
     }
 
     private String pieces(ArmorSet set) {
