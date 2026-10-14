@@ -164,7 +164,8 @@ class SharedWardrobeStorageTest {
     private WardrobeStorage sqlite(String serverId) {
         YamlConfiguration config = new YamlConfiguration();
         config.set("storage.type", "SQLITE");
-        config.set("storage.sqlite-file", dir.resolve("wardrobe.db").toString());
+        // relative to each server's own data folder, so both open the same file
+        config.set("storage.sqlite-file", "../wardrobe.db");
         config.set("storage.server-id", serverId);
         return open(serverId, config);
     }
