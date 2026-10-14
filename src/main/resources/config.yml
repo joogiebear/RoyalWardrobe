@@ -2,11 +2,14 @@
 # The menu layout, icons and sounds are in gui/wardrobe.yml. Reload both with /wardrobe reload.
 
 storage:
-  # SQLITE (no setup) or MYSQL (fill in the block below). Each server needs its own database for now:
-  # sharing one between servers is planned but not safe yet, because servers can overwrite each other's data.
+  # SQLITE (no setup) or MYSQL (fill in the block below). Several servers may share one MySQL database
+  # when they also share player inventories (see "Several servers, one wardrobe" in the README).
   # Storage settings apply on restart.
   type: SQLITE
   sqlite-file: "wardrobe.db"
+  # This server's name when sharing a MySQL database. Leave empty to generate one, kept in server-id.txt.
+  # Every server sharing the database needs a different one.
+  server-id: ""
   mysql:
     host: localhost
     port: 3306

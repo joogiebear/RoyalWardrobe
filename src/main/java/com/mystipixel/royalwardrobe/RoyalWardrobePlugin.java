@@ -27,6 +27,7 @@ public final class RoyalWardrobePlugin extends JavaPlugin {
     private WardrobeSessions sessions;
     private com.mystipixel.royalwardrobe.gui.TextInput textInput;
     private MessageManager messages;
+    private org.bukkit.scheduler.BukkitTask heartbeatTask;
 
     @Override
     public void onEnable() {
@@ -53,6 +54,13 @@ public final class RoyalWardrobePlugin extends JavaPlugin {
             getCommand("wardrobe").setTabCompleter(command);
         }
 
+        // keeps this server's claim on its players' wardrobes fresh for servers sharing the database, and
+        // retries any release that failed
+        long heartbeatTicks = WardrobeStorage.heartbeatInterval().toSeconds() * 20L;
+        this.heartbeatTask = getServer().getScheduler().runTaskTimerAsynchronously(this,
+                () -> storage.submit(storage::tick),
+                heartbeatTicks, heartbeatTicks);
+
         setupMetrics();
         // expansions register after plugins enable, so per-profile mode is decided on each open instead
         getLogger().info("RoyalWardrobe enabled: capacity " + capacity() + " sets, per-profile when "
@@ -61,6 +69,9 @@ public final class RoyalWardrobePlugin extends JavaPlugin {
 
     @Override
     public void onDisable() {
+        if (heartbeatTask != null) {
+            heartbeatTask.cancel();
+        }
         if (textInput != null) {
             textInput.shutdown();
         }
